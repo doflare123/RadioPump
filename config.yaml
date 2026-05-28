@@ -1,0 +1,21 @@
+server:
+  port: 8080
+  admin_name: "Admin" # логин для доступа к админке
+  admin_password: "changeme" # пароль для доступа к админке
+  jwt_secret: "change-this-secret" # секрет для генерации JWT токенов
+
+music:
+  dir: "./music"          # откуда читать треки
+
+waves:
+  - name: "main"
+    tags: []              # все треки
+  - name: "chill"
+    tags: ["lo-fi", "ambient"]
+  - name: "energy"
+    tags: ["rock", "electronic"]
+
+stream:
+  bitrate: "128k"
+  sample_rate: 44100
+  buffer_seconds: 5       # ring buffer размер
