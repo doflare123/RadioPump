@@ -4,8 +4,11 @@ import (
 	"RadioPump/internal/config"
 	store "RadioPump/internal/db"
 	"database/sql"
-	"log"
+	"fmt"
 	"net/http"
+	"os"
+	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -13,28 +16,61 @@ import (
 type Server struct {
 	cfg     *config.Config
 	storage *store.Storage
+	router  http.Handler
 }
 
 func NewServer() (*Server, error) {
 	cfg, err := config.NewConfig()
 	if err != nil {
-		log.Fatal("Загрузка конфигурации не удалась: ")
+		return nil, fmt.Errorf("не удалось загрузить конфиг: %w", err)
 	}
+
+	if err := os.MkdirAll("./data", 0o755); err != nil {
+		return nil, fmt.Errorf("не удалось создать папку data: %w", err)
+	}
+
 	db, err := sql.Open("sqlite", "./data/radio.db")
 	if err != nil {
-		log.Fatal("Подключение к базе данных не удалось: ", err)
-		return nil, err
+		return nil, fmt.Errorf("не удалось открыть sqlite: %w", err)
 	}
+
 	if err := db.Ping(); err != nil {
-		log.Fatal("Пинг базы данных не удался: ", err)
-		return nil, err
+		return nil, fmt.Errorf("не удалось проверить соединение с sqlite: %w", err)
 	}
-	Storage := store.NewStorage(db)
-	s := &Server{cfg: cfg, storage: Storage}
-	s.setupRouter()
+
+	if err := store.EnsureSchema(db); err != nil {
+		return nil, fmt.Errorf("не удалось подготовить схему БД: %w", err)
+	}
+
+	storage := store.NewStorage(db)
+	s := &Server{cfg: cfg, storage: storage}
+	s.router = s.setupRouter()
+
 	return s, nil
 }
 
 func (s *Server) Run(addr string) error {
-	return http.ListenAndServe(":8080", nil)
+	if s.router == nil {
+		return fmt.Errorf("роутер не инициализирован")
+	}
+
+	listenAddr := strings.TrimSpace(addr)
+	if listenAddr == "" {
+		port := s.cfg.Server.Port
+		if port == 0 {
+			port = 8080
+		}
+		listenAddr = fmt.Sprintf(":%d", port)
+	}
+
+	srv := &http.Server{
+		Addr:              listenAddr,
+		Handler:           s.router,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	return srv.ListenAndServe()
 }

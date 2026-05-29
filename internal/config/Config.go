@@ -1,18 +1,16 @@
 package config
 
-import (
-	"github.com/spf13/viper"
-)
+import "github.com/spf13/viper"
 
 type Config struct {
 	Server ServerConfig `mapstructure:"server"`
 	Music  MusicConfig  `mapstructure:"music"`
 	Waves  []WaveConfig `mapstructure:"waves"`
-	Stream StreamConfig `mapstructure:"stream"` // не слайс, это объект
+	Stream StreamConfig `mapstructure:"stream"`
 }
 
 type ServerConfig struct {
-	Port          string `mapstructure:"port"`
+	Port          int    `mapstructure:"port"`
 	AdminName     string `mapstructure:"admin_name"`
 	AdminPassword string `mapstructure:"admin_password"`
 	JWTSecret     string `mapstructure:"jwt_secret"`
@@ -28,22 +26,22 @@ type WaveConfig struct {
 }
 
 type StreamConfig struct {
-	Bitrate        string `mapstructure:"bitrate"`
-	Sample_rate    int    `mapstructure:"sample_rate"`
-	Buffer_seconds int    `mapstructure:"buffer_seconds"`
+	Bitrate       string `mapstructure:"bitrate"`
+	SampleRate    int    `mapstructure:"sample_rate"`
+	BufferSeconds int    `mapstructure:"buffer_seconds"`
 }
 
 func NewConfig() (*Config, error) {
 	viper.SetConfigFile("config.yaml")
-	viper.AddConfigPath("../")
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
 	}
 
-	var config Config
-	if err := viper.Unmarshal(&config); err != nil {
+	var cfg Config
+	if err := viper.Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
-	return &config, nil
+
+	return &cfg, nil
 }

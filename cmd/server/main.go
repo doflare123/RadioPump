@@ -1,16 +1,14 @@
 package main
 
-import (
-	"log"
-)
+import "log"
 
 func main() {
 	server, err := NewServer()
 	if err != nil {
-		log.Fatal("Ошибка при создании сервера: ", err)
-		return
+		log.Fatalf("не удалось создать сервер: %v", err)
 	}
-	if err := server.Run(":8080"); err != nil {
-		log.Fatalf("Ошибка запуска сервера: %v", err)
+
+	if err := server.Run(""); err != nil {
+		log.Fatalf("ошибка запуска сервера: %v", err)
 	}
 }
