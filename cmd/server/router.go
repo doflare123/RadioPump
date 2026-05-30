@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"RadioPump/internal/api/handlers"
@@ -14,9 +14,8 @@ import (
 func (s *Server) setupRouter() http.Handler {
 	r := chi.NewRouter()
 
-	// Базовые middleware: id запроса, реальный IP, лог, recover и timeout.
+	// Базовые middleware: id запроса, лог, recover и timeout.
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))

@@ -20,8 +20,8 @@ func NewTrackHandler(trackService *services.TrackService) *TrackHandler {
 	return &TrackHandler{trackService: trackService}
 }
 
-// trackPayload - DTO транспортного слоя.
-// Отделяем его от models.Track, чтобы HTTP-контракт можно было менять независимо.
+// trackPayload - DTO транспортного слоя. Он описывает, какие поля мы ожидаем в JSON при создании или обновлении трека. 
+// Это позволяет нам отделить внутреннюю модель данных от внешнего API и гибко управлять форматом входящих данных.
 type trackPayload struct {
 	Title    string `json:"title"`
 	Artist   string `json:"artist"`
