@@ -3,6 +3,7 @@ package main
 import (
 	"RadioPump/internal/config"
 	store "RadioPump/internal/db"
+	"RadioPump/internal/media"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -14,11 +15,14 @@ import (
 )
 
 type Server struct {
-	cfg     *config.Config
-	storage *store.Storage
-	router  http.Handler
+	cfg         *config.Config
+	storage     *store.Storage
+	fileStorage *media.TrackFileStorage
+	router      http.Handler
 }
 
+// Собирает все инфраструктурные зависимости приложения:
+// конфиг, SQLite, файловое хранилище музыки и HTTP router.
 func NewServer() (*Server, error) {
 	cfg, err := config.NewConfig()
 	if err != nil {
@@ -42,8 +46,13 @@ func NewServer() (*Server, error) {
 		return nil, fmt.Errorf("не удалось подготовить схему БД: %w", err)
 	}
 
+	fileStorage, err := media.NewTrackFileStorage(cfg.Music.Dir, cfg.Music.MaxFileSizeBytes())
+	if err != nil {
+		return nil, fmt.Errorf("не удалось подготовить папку музыки: %w", err)
+	}
+
 	storage := store.NewStorage(db)
-	s := &Server{cfg: cfg, storage: storage}
+	s := &Server{cfg: cfg, storage: storage, fileStorage: fileStorage}
 	s.router = s.setupRouter()
 
 	return s, nil

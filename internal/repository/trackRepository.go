@@ -86,9 +86,9 @@ func (r *SQLiteTrackRepository) Create(track *models.Track) error {
 func (r *SQLiteTrackRepository) Update(track *models.Track) error {
 	res, err := r.db.Exec(`
 		UPDATE tracks
-		SET title = ?, artist = ?, album = ?, path = ?, duration = ?
+		SET title = ?, artist = ?, album = ?, duration = ?
 		WHERE id = ?`,
-		track.Title, track.Artist, track.Album, track.Path, track.Duration, track.ID)
+		track.Title, track.Artist, track.Album, track.Duration, track.ID)
 	if err != nil {
 		return err
 	}

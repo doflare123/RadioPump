@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"RadioPump/internal/api/handlers"
@@ -22,7 +22,7 @@ func (s *Server) setupRouter() http.Handler {
 
 	// Связываем зависимости: repository -> service -> HTTP handler.
 	trackRepo := repository.NewTrackRepository(s.storage.DB)
-	trackService := services.NewTrackService(trackRepo)
+	trackService := services.NewTrackService(trackRepo, s.fileStorage)
 	trackHandler := handlers.NewTrackHandler(trackService)
 
 	r.Get("/api/healthz", func(w http.ResponseWriter, _ *http.Request) {

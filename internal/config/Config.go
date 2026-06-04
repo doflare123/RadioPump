@@ -2,6 +2,8 @@ package config
 
 import "github.com/spf13/viper"
 
+const defaultMaxMusicFileSizeMB = 20
+
 type Config struct {
 	Server ServerConfig `mapstructure:"server"`
 	Music  MusicConfig  `mapstructure:"music"`
@@ -17,7 +19,8 @@ type ServerConfig struct {
 }
 
 type MusicConfig struct {
-	Dir string `mapstructure:"dir"`
+	Dir           string `mapstructure:"dir"`
+	MaxFileSizeMB int    `mapstructure:"max_file_size_mb"`
 }
 
 type WaveConfig struct {
@@ -33,6 +36,8 @@ type StreamConfig struct {
 
 func NewConfig() (*Config, error) {
 	viper.SetConfigFile("config.yaml")
+	viper.SetDefault("music.dir", "./music")
+	viper.SetDefault("music.max_file_size_mb", defaultMaxMusicFileSizeMB)
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
@@ -44,4 +49,15 @@ func NewConfig() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// Переводит человекочитаемый лимит из YAML в байты.
+// Нулевое или отрицательное значение трактуем как дефолт, чтобы старые конфиги
+// не ломали загрузку музыки после обновления проекта.
+func (m MusicConfig) MaxFileSizeBytes() int64 {
+	mb := m.MaxFileSizeMB
+	if mb <= 0 {
+		mb = defaultMaxMusicFileSizeMB
+	}
+	return int64(mb) * 1024 * 1024
 }

@@ -6,6 +6,7 @@ server:
 
 music:
   dir: "./music"          # откуда читать треки
+  max_file_size_mb: 20    # максимальный размер загружаемого трека
 
 waves:
   - name: "main"

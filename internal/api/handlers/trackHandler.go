@@ -2,14 +2,26 @@ package handlers
 
 import (
 	"RadioPump/internal/api/services"
+	"RadioPump/internal/media"
 	"RadioPump/internal/models"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+)
+
+const (
+	// Покрывает границы multipart и маленькие текстовые поля.
+	// Сам файл дополнительно ограничен в media.TrackFileStorage.
+	multipartOverheadBytes = 1 << 20
+
+	// Защищает handler от больших текстовых form fields.
+	maxTextFieldBytes = 8 << 10
 )
 
 type TrackHandler struct {
@@ -20,8 +32,8 @@ func NewTrackHandler(trackService *services.TrackService) *TrackHandler {
 	return &TrackHandler{trackService: trackService}
 }
 
-// trackPayload - DTO транспортного слоя. Он описывает, какие поля мы ожидаем в JSON при создании или обновлении трека. 
-// Это позволяет нам отделить внутреннюю модель данных от внешнего API и гибко управлять форматом входящих данных.
+// DTO для JSON-режима. Основной путь создания трека теперь
+// multipart upload; JSON оставлен для ручного импорта уже существующих файлов.
 type trackPayload struct {
 	Title    string `json:"title"`
 	Artist   string `json:"artist"`
@@ -61,14 +73,104 @@ func (h *TrackHandler) GetTrackByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TrackHandler) CreateTrack(w http.ResponseWriter, r *http.Request) {
+	contentType := strings.ToLower(r.Header.Get("Content-Type"))
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		h.createTrackFromMultipart(w, r)
+		return
+	}
+
+	h.createTrackFromJSON(w, r)
+}
+
+// Реализует основной загрузочный-путь:
+// файл проходит потоковую запись, проверку размера и проверку аудио-заголовка.
+func (h *TrackHandler) createTrackFromMultipart(w http.ResponseWriter, r *http.Request) {
+	maxBodyBytes := h.trackService.MaxUploadBytes() + multipartOverheadBytes
+	if maxBodyBytes > multipartOverheadBytes {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	}
+
+	reader, err := r.MultipartReader()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "некорректный multipart-запрос")
+		return
+	}
+
+	var meta services.TrackMetadata
+	var saved *media.SavedTrackFile
+
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			h.trackService.DiscardUploadedFile(saved)
+			writeUploadError(w, err)
+			return
+		}
+
+		if part.FileName() != "" {
+			if part.FormName() != "file" {
+				_ = part.Close()
+				h.trackService.DiscardUploadedFile(saved)
+				writeError(w, http.StatusBadRequest, "файл нужно передавать в поле file")
+				return
+			}
+			if saved != nil {
+				_ = part.Close()
+				h.trackService.DiscardUploadedFile(saved)
+				writeError(w, http.StatusBadRequest, "за один запрос можно загрузить только один трек")
+				return
+			}
+
+			saved, err = h.trackService.StoreUploadedFile(part, part.FileName())
+			_ = part.Close()
+			if err != nil {
+				writeUploadError(w, err)
+				return
+			}
+			continue
+		}
+
+		if err := readTrackTextField(part, &meta); err != nil {
+			_ = part.Close()
+			h.trackService.DiscardUploadedFile(saved)
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		_ = part.Close()
+	}
+
+	if saved == nil {
+		writeError(w, http.StatusBadRequest, "файл трека обязателен")
+		return
+	}
+
+	track, err := h.trackService.CreateUploadedTrack(meta, saved)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "не удалось создать трек")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, track)
+}
+
+// Оставлен для ручного импорта записей, когда файл уже
+// лежит на сервере. Для обычной админ-загрузки нужно использовать multipart.
+func (h *TrackHandler) createTrackFromJSON(w http.ResponseWriter, r *http.Request) {
 	var payload trackPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		writeError(w, http.StatusBadRequest, "некорректный json")
 		return
 	}
 
-	if payload.Title == "" || payload.Path == "" {
-		writeError(w, http.StatusBadRequest, "поля title и path обязательны")
+	if payload.Title == "" {
+		writeError(w, http.StatusBadRequest, "поле title обязательно")
+		return
+	}
+	if payload.Path == "" {
+		writeError(w, http.StatusBadRequest, "поле path обязательно для JSON-импорта")
 		return
 	}
 
@@ -106,7 +208,6 @@ func (h *TrackHandler) UpdateTrack(w http.ResponseWriter, r *http.Request) {
 		Title:    payload.Title,
 		Artist:   payload.Artist,
 		Album:    payload.Album,
-		Path:     payload.Path,
 		Duration: payload.Duration,
 	}
 
@@ -143,6 +244,50 @@ func (h *TrackHandler) DeleteTrack(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func readTrackTextField(part multipartPart, meta *services.TrackMetadata) error {
+	value, err := readSmallText(part)
+	if err != nil {
+		return err
+	}
+
+	switch part.FormName() {
+	case "title":
+		meta.Title = value
+	case "artist":
+		meta.Artist = value
+	case "album":
+		meta.Album = value
+	case "duration":
+		if value == "" {
+			return nil
+		}
+		duration, err := strconv.Atoi(value)
+		if err != nil || duration < 0 {
+			return errors.New("поле duration должно быть неотрицательным числом")
+		}
+		meta.Duration = duration
+	}
+
+	return nil
+}
+
+// Описывает минимальный набор методов, который нужен helper-у.
+type multipartPart interface {
+	FormName() string
+	io.Reader
+}
+
+func readSmallText(r io.Reader) (string, error) {
+	data, err := io.ReadAll(io.LimitReader(r, maxTextFieldBytes+1))
+	if err != nil {
+		return "", err
+	}
+	if len(data) > maxTextFieldBytes {
+		return "", errors.New("текстовое поле слишком большое")
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
 func parseIntParam(r *http.Request, key string) (int, error) {
 	return strconv.Atoi(chi.URLParam(r, key))
 }
@@ -155,4 +300,20 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func writeUploadError(w http.ResponseWriter, err error) {
+	var maxBytesErr *http.MaxBytesError
+	switch {
+	case errors.As(err, &maxBytesErr):
+		writeError(w, http.StatusRequestEntityTooLarge, "файл трека превышает лимит")
+	case errors.Is(err, media.ErrTooLarge):
+		writeError(w, http.StatusRequestEntityTooLarge, "файл трека превышает лимит")
+	case errors.Is(err, media.ErrUnsupportedFormat):
+		writeError(w, http.StatusUnsupportedMediaType, "формат аудио не поддерживается")
+	case errors.Is(err, media.ErrEmptyFile), errors.Is(err, media.ErrCorruptAudioHeader):
+		writeError(w, http.StatusBadRequest, "файл трека пустой или поврежден")
+	default:
+		writeError(w, http.StatusInternalServerError, "не удалось сохранить файл трека")
+	}
 }
