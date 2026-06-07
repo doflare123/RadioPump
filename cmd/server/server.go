@@ -6,6 +6,7 @@ import (
 	"RadioPump/internal/media"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -81,5 +82,6 @@ func (s *Server) Run(addr string) error {
 		IdleTimeout:       60 * time.Second,
 	}
 
+	log.Printf("RadioPump слушает %s", listenAddr)
 	return srv.ListenAndServe()
 }

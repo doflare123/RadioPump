@@ -17,7 +17,7 @@ import (
 
 const (
 	// Покрывает границы multipart и маленькие текстовые поля.
-	// Сам файл дополнительно ограничен в media.TrackFileStorage.
+	// Сам файл дополнительно ограничен внутри media.TrackFileStorage.
 	multipartOverheadBytes = 1 << 20
 
 	// Защищает handler от больших текстовых form fields.
@@ -32,8 +32,8 @@ func NewTrackHandler(trackService *services.TrackService) *TrackHandler {
 	return &TrackHandler{trackService: trackService}
 }
 
-// DTO для JSON-режима. Основной путь создания трека теперь
-// multipart upload; JSON оставлен для ручного импорта уже существующих файлов.
+// trackPayload нужен для JSON-режима. Основной путь создания трека — multipart
+// upload, а JSON оставлен для ручного импорта файла, который уже лежит на сервере.
 type trackPayload struct {
 	Title    string `json:"title"`
 	Artist   string `json:"artist"`
@@ -42,7 +42,7 @@ type trackPayload struct {
 	Duration int    `json:"duration"`
 }
 
-func (h *TrackHandler) ListTracks(w http.ResponseWriter, r *http.Request) {
+func (h *TrackHandler) ListTracks(w http.ResponseWriter, _ *http.Request) {
 	tracks, err := h.trackService.GetAllTracks()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "не удалось загрузить треки")
@@ -82,8 +82,8 @@ func (h *TrackHandler) CreateTrack(w http.ResponseWriter, r *http.Request) {
 	h.createTrackFromJSON(w, r)
 }
 
-// Реализует основной загрузочный-путь:
-// файл проходит потоковую запись, проверку размера и проверку аудио-заголовка.
+// createTrackFromMultipart реализует основной upload-путь: файл пишется
+// потоково, проходит лимит размера и дешевую проверку аудио-заголовка.
 func (h *TrackHandler) createTrackFromMultipart(w http.ResponseWriter, r *http.Request) {
 	maxBodyBytes := h.trackService.MaxUploadBytes() + multipartOverheadBytes
 	if maxBodyBytes > multipartOverheadBytes {
@@ -156,8 +156,8 @@ func (h *TrackHandler) createTrackFromMultipart(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusCreated, track)
 }
 
-// Оставлен для ручного импорта записей, когда файл уже
-// лежит на сервере. Для обычной админ-загрузки нужно использовать multipart.
+// createTrackFromJSON нужен для ручного импорта записей, когда файл уже лежит
+// на сервере. Обычная админская загрузка должна использовать multipart.
 func (h *TrackHandler) createTrackFromJSON(w http.ResponseWriter, r *http.Request) {
 	var payload trackPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -221,7 +221,12 @@ func (h *TrackHandler) UpdateTrack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, track)
+	updated, err := h.trackService.GetByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusOK, track)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
 }
 
 func (h *TrackHandler) DeleteTrack(w http.ResponseWriter, r *http.Request) {
@@ -271,7 +276,7 @@ func readTrackTextField(part multipartPart, meta *services.TrackMetadata) error 
 	return nil
 }
 
-// Описывает минимальный набор методов, который нужен helper-у.
+// multipartPart описывает минимальный набор методов, который нужен helper-у.
 type multipartPart interface {
 	FormName() string
 	io.Reader

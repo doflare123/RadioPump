@@ -6,6 +6,7 @@ const defaultMaxMusicFileSizeMB = 20
 
 type Config struct {
 	Server ServerConfig `mapstructure:"server"`
+	CORS   CORSConfig   `mapstructure:"cors"`
 	Music  MusicConfig  `mapstructure:"music"`
 	Waves  []WaveConfig `mapstructure:"waves"`
 	Stream StreamConfig `mapstructure:"stream"`
@@ -23,6 +24,10 @@ type MusicConfig struct {
 	MaxFileSizeMB int    `mapstructure:"max_file_size_mb"`
 }
 
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+}
+
 type WaveConfig struct {
 	Name string   `mapstructure:"name"`
 	Tags []string `mapstructure:"tags"`
@@ -38,6 +43,10 @@ func NewConfig() (*Config, error) {
 	viper.SetConfigFile("config.yaml")
 	viper.SetDefault("music.dir", "./music")
 	viper.SetDefault("music.max_file_size_mb", defaultMaxMusicFileSizeMB)
+	viper.SetDefault("cors.allowed_origins", []string{
+		"http://localhost:5000",
+		"http://127.0.0.1:5000",
+	})
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err

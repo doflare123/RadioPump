@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Треки · RadioPump</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-page="admin-tracks">
+    <header class="topbar">
+      <div class="shell topbar__inner">
+        <a class="brand" href="index.html"><span class="brand__mark">RP</span><span>RadioPump</span></a>
+        <nav class="nav" aria-label="Навигация">
+          <a href="index.html">Главная</a>
+          <a href="library.html">Библиотека</a>
+          <a href="waves.html">Волны</a>
+          <a href="player.html">Плеер</a>
+          <a href="admin-login.html">Админ</a>
+        </nav>
+        <button class="pill" type="button" data-theme-toggle>Тема</button>
+      </div>
+    </header>
+
+    <main class="shell page">
+      <section class="page-head">
+        <div>
+          <h1>Треки</h1>
+          <p>Загрузка файлов и управление метаданными.</p>
+        </div>
+        <button class="button" type="button" data-logout>Выйти</button>
+      </section>
+
+      <section class="grid">
+        <div class="panel span-5">
+          <div class="panel__body">
+            <form class="form" data-upload-form>
+              <div class="field">
+                <label for="file">Файл</label>
+                <input class="file-input" id="file" name="file" type="file" accept=".mp3,.wav,.flac,.ogg,.m4a,.aac,audio/*" required />
+              </div>
+              <div class="field">
+                <label for="title">Название</label>
+                <input id="title" name="title" />
+              </div>
+              <div class="field">
+                <label for="artist">Исполнитель</label>
+                <input id="artist" name="artist" />
+              </div>
+              <div class="field">
+                <label for="album">Альбом</label>
+                <input id="album" name="album" />
+              </div>
+              <div class="field">
+                <label for="duration">Длительность, сек</label>
+                <input id="duration" name="duration" type="number" min="0" step="1" />
+              </div>
+              <button class="button button--primary" type="submit">Загрузить</button>
+              <div class="status" data-upload-status></div>
+            </form>
+          </div>
+        </div>
+
+        <div class="panel span-7">
+          <div class="panel__body stack">
+            <h2>Загруженные треки</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Название</th>
+                  <th>Исполнитель</th>
+                  <th>Альбом</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody data-admin-tracks></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

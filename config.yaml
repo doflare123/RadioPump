@@ -4,13 +4,18 @@ server:
   admin_password: "changeme" # пароль для доступа к админке
   jwt_secret: "change-this-secret" # секрет для генерации JWT токенов
 
+cors:
+  allowed_origins:
+    - "http://localhost:5500"
+    - "http://127.0.0.1:5500"
+
 music:
-  dir: "./music"          # откуда читать треки
-  max_file_size_mb: 20    # максимальный размер загружаемого трека
+  dir: "./music" # откуда читать и куда сохранять треки
+  max_file_size_mb: 20 # максимальный размер загружаемого трека
 
 waves:
   - name: "main"
-    tags: []              # все треки
+    tags: [] # все треки
   - name: "chill"
     tags: ["lo-fi", "ambient"]
   - name: "energy"
@@ -19,4 +24,4 @@ waves:
 stream:
   bitrate: "128k"
   sample_rate: 44100
-  buffer_seconds: 5       # ring buffer размер
+  buffer_seconds: 5 # размер ring buffer

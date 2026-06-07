@@ -98,6 +98,18 @@ func (s *TrackService) Update(track *models.Track) error {
 	return s.repo.Update(track)
 }
 
+// Delete удаляет запись трека и связанный с ней файл. Сначала удаляется БД,
+// потому что именно она является источником правды для существования трека.
 func (s *TrackService) Delete(id int) error {
-	return s.repo.Delete(id)
+	track, err := s.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.Delete(id); err != nil {
+		return err
+	}
+	if s.fileStore != nil {
+		s.fileStore.Remove(&media.SavedTrackFile{AbsolutePath: track.Path})
+	}
+	return nil
 }
