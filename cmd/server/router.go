@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"RadioPump/internal/api/handlers"
@@ -44,9 +44,9 @@ func (s *Server) setupRouter() http.Handler {
 	r.Post("/api/auth/login", authHandler.Login)
 	r.With(adminOnly.AdminOnly).Get("/api/auth/me", authHandler.Me)
 
-	// Публичное API для слушателей: список треков можно читать без токена.
-	r.Get("/api/tracks", trackHandler.ListTracks)
-	r.Get("/api/tracks/{id}", trackHandler.GetTrackByID)
+	// Список треков.
+	r.With(adminOnly.AdminOnly).Get("/api/tracks", trackHandler.ListTracks)
+	r.With(adminOnly.AdminOnly).Get("/api/tracks/{id}", trackHandler.GetTrackByID)
 
 	// Админское API: запись файлов, изменение и удаление доступны только админу.
 	r.Route("/api/admin", func(r chi.Router) {

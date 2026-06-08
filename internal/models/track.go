@@ -10,3 +10,8 @@ type Track struct {
 	CreatedAt string
 	Tags      []Tag
 }
+
+type TrackTag struct {
+	TrackID uint
+	TagID   uint
+}

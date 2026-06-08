@@ -44,8 +44,8 @@ func NewConfig() (*Config, error) {
 	viper.SetDefault("music.dir", "./music")
 	viper.SetDefault("music.max_file_size_mb", defaultMaxMusicFileSizeMB)
 	viper.SetDefault("cors.allowed_origins", []string{
-		"http://localhost:5000",
-		"http://127.0.0.1:5000",
+		"http://localhost:5500",
+		"http://127.0.0.1:5500",
 	})
 
 	if err := viper.ReadInConfig(); err != nil {
