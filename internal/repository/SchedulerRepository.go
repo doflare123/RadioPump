@@ -8,6 +8,7 @@ import (
 
 type SchedulerRepository interface {
 	GetMusic(tags []string) ([]models.Track, error)
+	GetTagId(name []string) ([]uint, error)
 }
 
 type SQLiteSchedulerRepository struct {
@@ -86,4 +87,41 @@ func (r *SQLiteSchedulerRepository) GetMusic(tags []string) ([]models.Track, err
 
 		return tracks, nil
 	}
+}
+
+func (r *SQLiteSchedulerRepository) GetTagId(names []string) ([]uint, error) {
+	if len(names) == 0 {
+		return []uint{}, nil
+	}
+
+	placeholders := make([]string, len(names))
+	args := make([]any, len(names))
+
+	for i, name := range names {
+		placeholders[i] = "?"
+		args[i] = name
+	}
+
+	query := `SELECT id FROM tags WHERE name IN (` + strings.Join(placeholders, ",") + `)`
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make([]uint, 0, len(names))
+	for rows.Next() {
+		var id uint
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ids, nil
 }

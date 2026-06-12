@@ -1,35 +1,50 @@
 package transcoder
 
-import "sync"
+import (
+	"RadioPump/internal/repository"
+	"RadioPump/internal/scheduler"
+	"sync"
+)
 
 type Station struct {
 	id    string
-	tags  []StationTag
 	input chan []byte
 	mu    sync.RWMutex
 	subs  map[string]chan []byte
 }
 
-type StationTag struct {
-	id   uint
-	name string
+type PlaybackEngine struct {
+	Stations  map[string]*Station
+	repo      repository.StationRepository
+	scheduler scheduler.Scheduler
 }
 
-type StationRuntime struct {
-	StationId uint
-	Queue     []uint
-	CurrentId uint
-	Dirty     bool // надо перечитывать кандидатов из базы
+// type ShortStation struct {
+// 	Id   string
+// 	tags []uint
+// }
+
+func NewPlaybackEngine(repo repository.StationRepository) *PlaybackEngine {
+	return &PlaybackEngine{
+		Stations: make(map[string]*Station),
+		repo:     repo,
+	}
 }
 
-func NewStation(id string) *Station {
+func (e *PlaybackEngine) NewStation(id string, tagsName []string) (*Station, error) {
 	s := &Station{
 		id:    id,
 		input: make(chan []byte, 64),
 		subs:  make(map[string]chan []byte),
 	}
+
+	e.Stations[id] = s
+	err := e.scheduler.RegisterStation(id, tagsName)
+	if err != nil {
+		return nil, err
+	}
 	go s.run()
-	return s
+	return s, nil
 }
 
 func (s *Station) run() {
@@ -78,3 +93,15 @@ func (s *Station) Unsubscribe(listenerId string) {
 	}
 	s.mu.Unlock()
 }
+
+// func (e *PlaybackEngine) GetStationsShort() []ShortStation {
+// 	e.Stations = make(map[string]*Station)
+// 	stations := make([]ShortStation, 0)
+// 	for _, station := range e.Stations {
+// 		stations = append(stations, ShortStation{
+// 			Id:   (station.id),
+// 			tags: station.Tags,
+// 		})
+// 	}
+// 	return stations
+// }
