@@ -15,8 +15,9 @@ var (
 type Scheduler interface {
 	RegisterStation(id string, tags []string) error
 	NextTrackID(stationID string) (uint, error)
-	MarkDirty(stationID string)
-	UnMarkDirty(stationID string)
+	MarkDirty(stationID string) error
+	QueueSnapshot(stationID string) (StationSnapshot, error)
+	CurrentTrackID(stationID string) (uint, error)
 }
 
 type scheduler struct {
@@ -31,6 +32,13 @@ type StationSchedule struct {
 	Queue     []uint
 	CurrentID uint
 	Dirty     bool // надо перечитывать кандидатов из базы
+	// Refilling bool // сейчас идет процесс перечитывания кандидатов из базы
+}
+
+type StationSnapshot struct {
+	StationID string
+	CurrentID uint
+	Queue     []uint
 }
 
 func NewScheduler(repo repository.SchedulerRepository) Scheduler {
@@ -60,12 +68,15 @@ func (s *scheduler) NextTrackID(stationID string) (uint, error) {
 		s.mu.Unlock()
 		return 0, ErrStationNotFound
 	}
-	needRefill := st.Dirty || len(st.Queue) == 0
+	needRefill := len(st.Queue) == 0
+	isDirty := st.Dirty
+
 	tags := append([]string(nil), st.Tags...)
 	s.mu.Unlock()
 
-	if needRefill {
-		if err := s.refillStation(stationID, tags); err != nil {
+	preserveQueue := isDirty && !needRefill
+	if needRefill || isDirty {
+		if err := s.refillStation(stationID, tags, preserveQueue); err != nil {
 			return 0, err
 		}
 	}
@@ -82,23 +93,30 @@ func (s *scheduler) NextTrackID(stationID string) (uint, error) {
 	nextID := st.Queue[0]
 	st.Queue = st.Queue[1:]
 	st.CurrentID = nextID
-	s.mu.Unlock()
+
 	return nextID, nil
 }
 
-func (s *scheduler) MarkDirty(stationID string) {
+func (s *scheduler) MarkDirty(stationID string) error {
 	s.mu.Lock()
-	s.Stations[stationID].Dirty = true
+	defer s.mu.Unlock()
+	if st, ok := s.Stations[stationID]; ok {
+		st.Dirty = true
+	} else {
+		return ErrStationNotFound
+	}
+	return nil
+}
+
+func (s *scheduler) unMarkDirty(stationID string) {
+	s.mu.Lock()
+	if st, ok := s.Stations[stationID]; ok {
+		st.Dirty = false
+	}
 	s.mu.Unlock()
 }
 
-func (s *scheduler) UnMarkDirty(stationID string) {
-	s.mu.Lock()
-	s.Stations[stationID].Dirty = false
-	s.mu.Unlock()
-}
-
-func (s *scheduler) refillStation(stationID string, tags []string) error {
+func (s *scheduler) refillStation(stationID string, tags []string, preserveQueue bool) error {
 	tracks, err := s.repo.GetMusic(tags)
 	if err != nil {
 		return err
@@ -106,14 +124,14 @@ func (s *scheduler) refillStation(stationID string, tags []string) error {
 	if len(tracks) == 0 {
 		return ErrNoTracks
 	}
-	ids := make([]uint, len(tracks))
-	for _, track := range tracks {
-		ids = append(ids, uint(track.ID))
-	}
 
-	rand.Shuffle(len(ids), func(i, j int) {
-		ids[i], ids[j] = ids[j], ids[i]
-	})
+	freshSet := make(map[uint]struct{}, len(tracks))
+	freshIDs := make([]uint, 0, len(tracks))
+	for _, track := range tracks {
+		id := uint(track.ID)
+		freshSet[id] = struct{}{}
+		freshIDs = append(freshIDs, id)
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -123,8 +141,67 @@ func (s *scheduler) refillStation(stationID string, tags []string) error {
 		return ErrStationNotFound
 	}
 
-	st.Queue = ids
+	var nextQueue []uint
+
+	if preserveQueue {
+		queued := make(map[uint]struct{}, len(st.Queue)+1)
+
+		for _, id := range st.Queue {
+			if _, ok := freshSet[id]; ok {
+				nextQueue = append(nextQueue, id)
+				queued[id] = struct{}{}
+			}
+		}
+
+		if st.CurrentID != 0 {
+			queued[st.CurrentID] = struct{}{}
+		}
+
+		var added []uint
+		for _, id := range freshIDs {
+			if _, exists := queued[id]; !exists {
+				added = append(added, id)
+			}
+		}
+
+		rand.Shuffle(len(added), func(i, j int) {
+			added[i], added[j] = added[j], added[i]
+		})
+
+		nextQueue = append(nextQueue, added...)
+	} else {
+		nextQueue = freshIDs
+		rand.Shuffle(len(nextQueue), func(i, j int) {
+			nextQueue[i], nextQueue[j] = nextQueue[j], nextQueue[i]
+		})
+	}
+
+	st.Queue = nextQueue
 	st.Dirty = false
 
 	return nil
+}
+
+func (s *scheduler) QueueSnapshot(stationID string) (StationSnapshot, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	st, ok := s.Stations[stationID]
+	if !ok {
+		return StationSnapshot{}, ErrStationNotFound
+	}
+	return StationSnapshot{
+		StationID: st.StationID,
+		CurrentID: st.CurrentID,
+		Queue:     append([]uint(nil), st.Queue...),
+	}, nil
+}
+
+func (s *scheduler) CurrentTrackID(stationID string) (uint, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	st, ok := s.Stations[stationID]
+	if !ok {
+		return 0, ErrStationNotFound
+	}
+	return st.CurrentID, nil
 }
