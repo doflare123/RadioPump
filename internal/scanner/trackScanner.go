@@ -22,7 +22,7 @@ func NewScanner(repo repository.ScannerRepository) Scanner {
 	return &scanner{repo: repo}
 }
 
-func scanMusic(root string) ([]ScannerFile, error) {
+func scanMusic(root string) (ScannerFile, error) {
 	allow := map[string]bool{
 		".mp3":  true,
 		".flac": true,
@@ -33,7 +33,7 @@ func scanMusic(root string) ([]ScannerFile, error) {
 		".alac": true,
 		".aiff": true,
 	}
-	var tracks []ScannerFile
+	var tracks ScannerFile
 	// tracks =
 	return tracks, nil
 }

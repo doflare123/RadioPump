@@ -17,7 +17,7 @@ type SQLiteSchedulerRepository struct {
 
 var _ SchedulerRepository = (*SQLiteSchedulerRepository)(nil)
 
-func NewScheldulerRepository(db *sql.DB) SchedulerRepository {
+func NewSchedulerRepository(db *sql.DB) SchedulerRepository {
 	return &SQLiteSchedulerRepository{db: db}
 }
 

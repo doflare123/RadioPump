@@ -1,0 +1,183 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="RadioPump corrected architecture" id="radiopump-corrected-architecture">
+    <mxGraphModel dx="808" dy="429" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="group_bootstrap" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=0;fillColor=#eaf3ff;strokeColor=#6c8ebf;fontStyle=1;" value="Bootstrap: запуск сервера" vertex="1">
+          <mxGeometry height="880" width="480" x="40" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="b_start" parent="group_bootstrap" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" value="Запуск сервера" vertex="1">
+          <mxGeometry height="60" width="210" x="95" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="b_config" parent="group_bootstrap" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" value="Читаем config.yaml&#xa;волны, теги, stream, music" vertex="1">
+          <mxGeometry height="70" width="260" x="70" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="b_db" parent="group_bootstrap" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" value="Открываем SQLite&#xa;EnsureSchema + repositories" vertex="1">
+          <mxGeometry height="70" width="260" x="70" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="b_scheduler" parent="group_bootstrap" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" value="Создаем Scheduler(repo)&#xa;он будет хранить StationSchedule" vertex="1">
+          <mxGeometry height="70" width="260" x="70" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="b_engine" parent="group_bootstrap" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" value="Создаем PlaybackEngine&#xa;scheduler + trackRepo" vertex="1">
+          <mxGeometry height="70" width="260" x="70" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="b_loop" parent="group_bootstrap" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" value="Для каждой волны из config" vertex="1">
+          <mxGeometry height="80" width="210" x="95" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="b_start_workers" parent="group_bootstrap" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" value="Запускаем playback worker&#xa;для каждой станции" vertex="1">
+          <mxGeometry height="70" width="260" x="70" y="760" as="geometry" />
+        </mxCell>
+        <mxCell id="e_b1" edge="1" parent="group_bootstrap" source="b_start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="b_config">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_b2" edge="1" parent="group_bootstrap" source="b_config" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="b_db">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_b3" edge="1" parent="group_bootstrap" source="b_db" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="b_scheduler">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_b4" edge="1" parent="group_bootstrap" source="b_scheduler" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="b_engine">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_b5" edge="1" parent="group_bootstrap" source="b_engine" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="b_loop">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_b6" edge="1" parent="group_bootstrap" source="b_loop" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="b_start_workers">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p_create_station" parent="group_bootstrap" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;" value="PlaybackEngine.CreateStation(wave)&#xa;создает Station как аудио-канал" vertex="1">
+          <mxGeometry height="70" width="270" x="210" y="660" as="geometry" />
+        </mxCell>
+        <mxCell id="e_loop_to_station" edge="1" parent="group_bootstrap" source="b_loop" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="p_create_station" value="audio side">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="group_scheduler" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=0;fillColor=#e9f7ef;strokeColor=#82b366;fontStyle=1;" value="Scheduler: очереди и правила" vertex="1">
+          <mxGeometry height="880" width="460" x="480" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s_register" parent="group_scheduler" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="Scheduler.RegisterStation(wave)&#xa;создает StationSchedule" vertex="1">
+          <mxGeometry height="70" width="260" x="70" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="s_select" parent="group_scheduler" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="Repository: SELECT track_id&#xa;по любому тегу станции" vertex="1">
+          <mxGeometry height="70" width="260" x="70" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="s_fill" parent="group_scheduler" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="Shuffle track_id&#xa;заполняем Queue внутри Scheduler" vertex="1">
+          <mxGeometry height="70" width="260" x="70" y="760" as="geometry" />
+        </mxCell>
+        <mxCell id="p_refill" parent="group_scheduler" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" value="Scheduler перечитывает track_id&#xa;из БД, shuffle, refill" vertex="1">
+          <mxGeometry height="70" width="260" x="70" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="e_schedule1" edge="1" parent="group_scheduler" source="s_register" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="s_select">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_schedule2" edge="1" parent="group_scheduler" source="s_select" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="s_fill">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="group_playback" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=0;fillColor=#fff4e6;strokeColor=#d79b00;fontStyle=1;" value="PlaybackEngine + Station: звук и слушатели" vertex="1">
+          <mxGeometry height="880" width="420" x="940" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="p_next" parent="group_playback" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;" value="Worker спрашивает Scheduler.NextTrackID(stationID)" vertex="1">
+          <mxGeometry height="70" width="270" x="95" y="570" as="geometry" />
+        </mxCell>
+        <mxCell id="p_dirty" parent="group_playback" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;" value="Queue пустая&#xa;или Dirty?" vertex="1">
+          <mxGeometry height="90" width="200" x="130" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="p_ffmpeg" parent="group_playback" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;" value="ffmpeg(track.Path)&#xa;MP3 48 kHz / 256 kbps" vertex="1">
+          <mxGeometry height="70" width="270" x="95" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="p_broadcast" parent="group_playback" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;" value="Station.Broadcast(bytes)&#xa;раздача слушателям" vertex="1">
+          <mxGeometry height="70" width="270" x="95" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="e_p1" edge="1" parent="group_playback" source="p_next" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="p_dirty">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="390" y="605" />
+              <mxPoint x="390" y="75" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_p4" edge="1" parent="group_playback" source="p_ffmpeg" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="p_broadcast">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p_load_track" parent="group_playback" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;" value="TrackRepository.GetByID(track_id)&#xa;берем path + metadata" vertex="1">
+          <mxGeometry height="70" width="270" x="95" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="e_dirty_no" edge="1" parent="group_playback" source="p_dirty" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="p_load_track" value="нет">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p_ws" parent="group_playback" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;" value="WS now playing&#xa;title, artist, album, started_at" vertex="1">
+          <mxGeometry height="70" width="270" x="95" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="e_p3" edge="1" parent="group_playback" source="p_ws" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="p_ffmpeg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_p2" edge="1" parent="group_playback" source="p_load_track" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="p_ws">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="group_update" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=0;fillColor=#f8e8ee;strokeColor=#b85450;fontStyle=1;" value="Library update: добавление/изменение треков" vertex="1">
+          <mxGeometry height="130" width="1300" x="40" y="950" as="geometry" />
+        </mxCell>
+        <mxCell id="u_upload" parent="group_update" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;" value="Upload / rescan файла" vertex="1">
+          <mxGeometry height="55" width="220" x="60" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="u_db" parent="group_update" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;" value="Парсим metadata/tags&#xa;tracks + track_tags в БД" vertex="1">
+          <mxGeometry height="55" width="250" x="360" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="u_dirty" parent="group_update" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;" value="Помечаем затронутые&#xa;StationSchedule.Dirty = true" vertex="1">
+          <mxGeometry height="55" width="260" x="700" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="u_apply" parent="group_update" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;" value="На следующем треке Scheduler&#xa;пересоберет очередь" vertex="1">
+          <mxGeometry height="55" width="230" x="1040" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e_u1" edge="1" parent="group_update" source="u_upload" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="u_db">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_u2" edge="1" parent="group_update" source="u_db" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="u_dirty">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_u3" edge="1" parent="group_update" source="u_dirty" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="u_apply">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="note_scanner" parent="1" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="Важно: scanner/importer только обновляет библиотеку.&#xa;Подбор треков по тегам делает Scheduler, не scanner." vertex="1">
+          <mxGeometry height="70" width="400" x="470" y="1080" as="geometry" />
+        </mxCell>
+        <mxCell id="note_station" parent="1" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="Важно: Station не хранит Queue.&#xa;Station = input channel + subscribers + broadcast." vertex="1">
+          <mxGeometry height="70" width="420" x="920" y="1080" as="geometry" />
+        </mxCell>
+        <mxCell id="note_ids" parent="1" style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="Между слоями таскаем track_id.&#xa;Полный Track берется из БД перед воспроизведением." vertex="1">
+          <mxGeometry height="70" width="400" x="40" y="1080" as="geometry" />
+        </mxCell>
+        <mxCell id="e_loop_to_schedule" edge="1" parent="1" source="b_loop" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="s_register" value="schedule side">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_workers_to_next" edge="1" parent="1" source="b_start_workers" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="p_next">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="240" y="900" />
+              <mxPoint x="1170" y="900" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_dirty_refill" edge="1" parent="1" source="p_dirty" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="p_refill" value="да">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_loop_next" edge="1" parent="1" source="p_broadcast" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" target="p_next" value="следующий трек">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1170" y="590" />
+              <mxPoint x="1170" y="590" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_refill_back" edge="1" parent="1" source="p_refill" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" target="p_load_track" value="готово">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="265" />
+              <mxPoint x="1000" y="215" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
