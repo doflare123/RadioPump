@@ -15,8 +15,9 @@ type Station struct {
 
 type PlaybackEngine struct {
 	Stations  map[string]*Station
-	repo      repository.StationRepository
+	repo      repository.TrackRepository
 	scheduler scheduler.Scheduler
+	streamer  TrackStreamer
 }
 
 // type ShortStation struct {
@@ -24,10 +25,16 @@ type PlaybackEngine struct {
 // 	tags []uint
 // }
 
-func NewPlaybackEngine(repo repository.StationRepository) *PlaybackEngine {
+func NewPlaybackEngine(
+	trackRepo repository.TrackRepository,
+	scheduler scheduler.Scheduler,
+	streamer TrackStreamer,
+) *PlaybackEngine {
 	return &PlaybackEngine{
-		Stations: make(map[string]*Station),
-		repo:     repo,
+		Stations:  make(map[string]*Station),
+		repo:      trackRepo,
+		scheduler: scheduler,
+		streamer:  streamer,
 	}
 }
 
@@ -44,6 +51,7 @@ func (e *PlaybackEngine) NewStation(id string, tagsName []string) (*Station, err
 		return nil, err
 	}
 	go s.run()
+	go e.runStationWorker(id)
 	return s, nil
 }
 

@@ -9,10 +9,10 @@ import (
 // Любой тип с таким набором методов автоматически удовлетворяет интерфейсу.
 type TrackRepository interface {
 	GetAll() ([]models.Track, error)
-	GetByID(id int) (*models.Track, error)
+	GetByID(id uint) (*models.Track, error)
 	Create(track *models.Track) error
 	Update(track *models.Track) error
-	Delete(id int) error
+	Delete(id uint) error
 }
 
 type SQLiteTrackRepository struct {
@@ -52,7 +52,7 @@ func (r *SQLiteTrackRepository) GetAll() ([]models.Track, error) {
 	return tracks, nil
 }
 
-func (r *SQLiteTrackRepository) GetByID(id int) (*models.Track, error) {
+func (r *SQLiteTrackRepository) GetByID(id uint) (*models.Track, error) {
 	var t models.Track
 	err := r.db.QueryRow(`
 		SELECT id, title, artist, album, path, duration, created_at
@@ -77,7 +77,7 @@ func (r *SQLiteTrackRepository) Create(track *models.Track) error {
 
 	id, err := res.LastInsertId()
 	if err == nil {
-		track.ID = int(id)
+		track.ID = uint(id)
 	}
 
 	return nil
@@ -104,7 +104,7 @@ func (r *SQLiteTrackRepository) Update(track *models.Track) error {
 	return nil
 }
 
-func (r *SQLiteTrackRepository) Delete(id int) error {
+func (r *SQLiteTrackRepository) Delete(id uint) error {
 	res, err := r.db.Exec(`DELETE FROM tracks WHERE id = ?`, id)
 	if err != nil {
 		return err

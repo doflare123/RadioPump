@@ -179,7 +179,7 @@ func (h *TrackHandler) createTrackFromJSON(w http.ResponseWriter, r *http.Reques
 		Artist:   payload.Artist,
 		Album:    payload.Album,
 		Path:     payload.Path,
-		Duration: payload.Duration,
+		Duration: uint(payload.Duration),
 	}
 
 	if err := h.trackService.Create(track); err != nil {
@@ -204,11 +204,11 @@ func (h *TrackHandler) UpdateTrack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	track := &models.Track{
-		ID:       id,
+		ID:       uint(id),
 		Title:    payload.Title,
 		Artist:   payload.Artist,
 		Album:    payload.Album,
-		Duration: payload.Duration,
+		Duration: uint(payload.Duration),
 	}
 
 	err = h.trackService.Update(track)

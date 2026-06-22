@@ -1,12 +1,12 @@
 package models
 
 type Track struct {
-	ID        int
+	ID        uint
 	Title     string
 	Artist    string
 	Album     string
 	Path      string
-	Duration  int
+	Duration  uint
 	CreatedAt string
 	Tags      []Tag
 }

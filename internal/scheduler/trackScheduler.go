@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	ErrStationNotFound = errors.New("station not found")
-	ErrNoTracks        = errors.New("no tracks for station")
+	ErrStationNotFound = errors.New("станция не найдена")
+	ErrNoTracks        = errors.New("для станции нет подходящих треков")
 )
 
 type Scheduler interface {
@@ -50,15 +50,23 @@ func NewScheduler(repo repository.SchedulerRepository) Scheduler {
 
 func (s *scheduler) RegisterStation(id string, tags []string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+
 	s.Stations[id] = &StationSchedule{
 		StationID: id,
 		Tags:      append([]string(nil), tags...),
 		Queue:     make([]uint, 0),
-		Dirty:     true,
+		Dirty:     false,
 	}
 
-	return nil
+	s.mu.Unlock()
+
+	err := s.refillStation(id, tags, false)
+
+	if errors.Is(err, ErrNoTracks) {
+		return nil
+	}
+
+	return err
 }
 
 func (s *scheduler) NextTrackID(stationID string) (uint, error) {

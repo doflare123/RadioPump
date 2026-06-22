@@ -16,7 +16,7 @@ type TrackMetadata struct {
 	Title    string
 	Artist   string
 	Album    string
-	Duration int
+	Duration uint
 }
 
 type TrackService struct {
@@ -34,7 +34,7 @@ func (s *TrackService) GetAllTracks() ([]models.Track, error) {
 	return s.repo.GetAll()
 }
 
-func (s *TrackService) GetByID(id int) (*models.Track, error) {
+func (s *TrackService) GetByID(id uint) (*models.Track, error) {
 	return s.repo.GetByID(id)
 }
 
@@ -83,7 +83,7 @@ func (s *TrackService) CreateUploadedTrack(meta TrackMetadata, saved *media.Save
 		Artist:   meta.Artist,
 		Album:    meta.Album,
 		Path:     saved.StoredPath,
-		Duration: meta.Duration,
+		Duration: uint(meta.Duration),
 	}
 
 	if err := s.repo.Create(track); err != nil {
@@ -100,7 +100,7 @@ func (s *TrackService) Update(track *models.Track) error {
 
 // Delete удаляет запись трека и связанный с ней файл. Сначала удаляется БД,
 // потому что именно она является источником правды для существования трека.
-func (s *TrackService) Delete(id int) error {
+func (s *TrackService) Delete(id uint) error {
 	track, err := s.repo.GetByID(id)
 	if err != nil {
 		return err

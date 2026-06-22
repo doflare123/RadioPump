@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"RadioPump/internal/models"
 	"database/sql"
 	"strings"
 )
@@ -8,6 +9,7 @@ import (
 type StationRepository interface {
 	GetTagById(id uint) (string, error)
 	GetTagId(name []string) ([]uint, error)
+	GetByID(id uint) (*models.Track, error)
 }
 
 type SQLiteStationRepository struct {
@@ -61,4 +63,18 @@ func (r *SQLiteStationRepository) GetTagId(names []string) ([]uint, error) {
 	}
 
 	return ids, nil
+}
+
+func (r *SQLiteStationRepository) GetByID(id uint) (*models.Track, error) {
+	var t models.Track
+	err := r.db.QueryRow(`
+		SELECT id, title, artist, album, path, duration, created_at
+		FROM tracks
+		WHERE id = ?`, id).
+		Scan(&t.ID, &t.Title, &t.Artist, &t.Album, &t.Path, &t.Duration, &t.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &t, nil
 }
