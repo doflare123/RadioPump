@@ -39,3 +39,15 @@ func (e *PlaybackEngine) runStationWorker(stationID string) {
 		}
 	}
 }
+
+func (e *PlaybackEngine) SubStation(stationID, listenerID string) bool {
+	if stationID == "" || listenerID == "0" {
+		return false
+	}
+	station := e.Stations[stationID]
+	if station == nil {
+		return false
+	}
+	station.Subscribe(listenerID)
+	return true
+}

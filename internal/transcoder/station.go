@@ -3,6 +3,7 @@ package transcoder
 import (
 	"RadioPump/internal/repository"
 	"RadioPump/internal/scheduler"
+	"errors"
 	"sync"
 )
 
@@ -19,6 +20,8 @@ type PlaybackEngine struct {
 	scheduler scheduler.Scheduler
 	streamer  TrackStreamer
 }
+
+var ErrStationNotFound = errors.New("станция не найдена")
 
 // type ShortStation struct {
 // 	Id   string
@@ -83,6 +86,25 @@ func (s *Station) broadcast(data []byte) {
 
 func (s *Station) Close() {
 	close(s.input)
+}
+
+func (e *PlaybackEngine) Subscribe(stationID, listenerID string) (<-chan []byte, error) {
+	if stationID == "" || listenerID == "" {
+		return nil, ErrStationNotFound
+	}
+	station := e.Stations[stationID]
+	if station == nil {
+		return nil, ErrStationNotFound
+	}
+	return station.Subscribe(listenerID), nil
+}
+
+func (e *PlaybackEngine) Unsubscribe(stationID, listenerID string) {
+	station := e.Stations[stationID]
+	if station == nil {
+		return
+	}
+	station.Unsubscribe(listenerID)
 }
 
 func (s *Station) Subscribe(listenerId string) <-chan []byte {
