@@ -4,6 +4,9 @@ import (
 	"RadioPump/internal/config"
 	store "RadioPump/internal/db"
 	"RadioPump/internal/media"
+	"RadioPump/internal/repository"
+	schedulerpkg "RadioPump/internal/scheduler"
+	"RadioPump/internal/transcoder"
 	"database/sql"
 	"fmt"
 	"log"
@@ -19,6 +22,9 @@ type Server struct {
 	cfg         *config.Config
 	storage     *store.Storage
 	fileStorage *media.TrackFileStorage
+	trackRepo   repository.TrackRepository
+	scheduler   schedulerpkg.Scheduler
+	playback    *transcoder.PlaybackEngine
 	router      http.Handler
 }
 
@@ -53,7 +59,26 @@ func NewServer() (*Server, error) {
 	}
 
 	storage := store.NewStorage(db)
-	s := &Server{cfg: cfg, storage: storage, fileStorage: fileStorage}
+
+	repo := repository.NewRepository(db)
+	sched := schedulerpkg.NewScheduler(repo)
+	streamer := transcoder.NewEncoder("ffmpeg", cfg.Stream.Bitrate, cfg.Stream.SampleRate)
+	playback := transcoder.NewPlaybackEngine(repo, sched, streamer)
+
+	for _, wave := range cfg.Waves {
+		if _, err := playback.NewStation(wave.Name, wave.Tags); err != nil {
+			return nil, fmt.Errorf("не удалось создать волну %q: %w", wave.Name, err)
+		}
+	}
+
+	s := &Server{
+		cfg:         cfg,
+		storage:     storage,
+		fileStorage: fileStorage,
+		trackRepo:   repo,
+		scheduler:   sched,
+		playback:    playback,
+	}
 	s.router = s.setupRouter()
 
 	return s, nil

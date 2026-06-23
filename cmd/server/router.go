@@ -1,10 +1,9 @@
-﻿package main
+package main
 
 import (
 	"RadioPump/internal/api/handlers"
 	adminmiddleware "RadioPump/internal/api/middleware"
 	"RadioPump/internal/api/services"
-	"RadioPump/internal/repository"
 	"net/http"
 	"time"
 
@@ -22,8 +21,7 @@ func (s *Server) setupRouter() http.Handler {
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	// Связываем зависимости по слоям: repository -> service -> HTTP handlers.
-	trackRepo := repository.NewTrackRepository(s.storage.DB)
-	trackService := services.NewTrackService(trackRepo, s.fileStorage)
+	trackService := services.NewTrackService(s.trackRepo, s.fileStorage)
 	trackHandler := handlers.NewTrackHandler(trackService)
 
 	authService := services.NewAuthService(

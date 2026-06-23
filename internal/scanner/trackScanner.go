@@ -33,6 +33,7 @@ func scanMusic(root string) (ScannerFile, error) {
 		".alac": true,
 		".aiff": true,
 	}
+	_ = allow
 	var tracks ScannerFile
 	// tracks =
 	return tracks, nil

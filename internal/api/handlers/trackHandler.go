@@ -53,7 +53,7 @@ func (h *TrackHandler) ListTracks(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *TrackHandler) GetTrackByID(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIntParam(r, "id")
+	id, err := parseUintParam(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "некорректный id трека")
 		return
@@ -191,7 +191,7 @@ func (h *TrackHandler) createTrackFromJSON(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *TrackHandler) UpdateTrack(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIntParam(r, "id")
+	id, err := parseUintParam(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "некорректный id трека")
 		return
@@ -204,7 +204,7 @@ func (h *TrackHandler) UpdateTrack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	track := &models.Track{
-		ID:       uint(id),
+		ID:       id,
 		Title:    payload.Title,
 		Artist:   payload.Artist,
 		Album:    payload.Album,
@@ -230,7 +230,7 @@ func (h *TrackHandler) UpdateTrack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TrackHandler) DeleteTrack(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIntParam(r, "id")
+	id, err := parseUintParam(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "некорректный id трека")
 		return
@@ -270,7 +270,7 @@ func readTrackTextField(part multipartPart, meta *services.TrackMetadata) error 
 		if err != nil || duration < 0 {
 			return errors.New("поле duration должно быть неотрицательным числом")
 		}
-		meta.Duration = duration
+		meta.Duration = uint(duration)
 	}
 
 	return nil
@@ -293,8 +293,12 @@ func readSmallText(r io.Reader) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-func parseIntParam(r *http.Request, key string) (int, error) {
-	return strconv.Atoi(chi.URLParam(r, key))
+func parseUintParam(r *http.Request, key string) (uint, error) {
+	value, err := strconv.ParseUint(chi.URLParam(r, key), 10, 0)
+	if err != nil {
+		return 0, err
+	}
+	return uint(value), nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
