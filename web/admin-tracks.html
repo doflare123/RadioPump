@@ -36,8 +36,11 @@
             <form class="form" data-upload-form>
               <div class="field">
                 <label for="file">Файл</label>
-                <input class="file-input" id="file" name="file" type="file" accept=".mp3,.wav,.flac,.ogg,.m4a,.aac,audio/*" required />
+                <input class="file-input" id="file" name="file" type="file" accept=".mp3,.mp2,.mpa,.flac,.wav,.wave,.ogg,.oga,.opus,.spx,.m4a,.m4b,.mp4,.alac,.aac,.aif,.aiff,.aifc,.wma,.ape,.wv,.mka,.webm,.mpc,.dsf,.dff" required />
+                <small>Теги читаются на вашем устройстве. Файл отправится только после нажатия «Загрузить».</small>
               </div>
+              <div class="status" data-metadata-status role="status" aria-live="polite"></div>
+              <img data-metadata-cover class="metadata-cover" alt="Обложка из выбранного файла" hidden />
               <div class="field">
                 <label for="title">Название</label>
                 <input id="title" name="title" />
@@ -54,7 +57,12 @@
                 <label for="duration">Длительность, сек</label>
                 <input id="duration" name="duration" type="number" min="0" step="1" />
               </div>
-              <button class="button button--primary" type="submit">Загрузить</button>
+              <details>
+                <summary>Дополнительные сведения из файла</summary>
+                <dl class="metadata-details" data-metadata-details></dl>
+                <small>Эти сведения и обложка доступны для просмотра. Сейчас в библиотеке сохраняются название, исполнитель, альбом и длительность.</small>
+              </details>
+              <button class="button button--primary" type="submit" disabled>Загрузить</button>
               <div class="status" data-upload-status></div>
             </form>
           </div>

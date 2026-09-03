@@ -16,10 +16,10 @@ music:
 waves:
   - name: "main"
     tags: [] # все треки
-  # - name: "chill"
-  #   tags: ["lo-fi", "ambient"]
-  # - name: "energy"
-  #   tags: ["rock", "electronic"]
+  - name: "chill"
+    tags: ["lo-fi", "ambient"]
+  - name: "energy"
+    tags: ["rock", "electronic"]
 
 stream:
   bitrate: "128k"

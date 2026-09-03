@@ -137,23 +137,31 @@ async function initAdminTracks() {
     });
   }
 
-  setupUploadForm();
+  await setupUploadForm();
   await refreshAdminTracks();
 }
 
-function setupUploadForm() {
+async function setupUploadForm() {
   const form = document.querySelector("[data-upload-form]");
   const status = document.querySelector("[data-upload-status]");
   if (!form) return;
 
+  // Парсер нужен только в админке, поэтому публичные страницы его не загружают.
+  const { setupMetadataPreview } = await import("./service/uploadMetadata.js");
+  const preview = setupMetadataPreview(form);
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!preview.canUpload()) return;
+    // FormData создаём до блокировки input: disabled-поля браузер в него не включает.
+    const payload = new FormData(form);
+    preview.setUploading(true);
     status.textContent = "Загрузка...";
 
     try {
       const response = await authFetch("/api/admin/tracks", {
         method: "POST",
-        body: new FormData(form),
+        body: payload,
       });
       const data = await readJSON(response);
       if (!response.ok) throw new Error(data.error || "Не удалось загрузить трек");
@@ -163,6 +171,8 @@ function setupUploadForm() {
       await refreshAdminTracks();
     } catch (error) {
       status.textContent = error.message;
+    } finally {
+      preview.setUploading(false);
     }
   });
 }
@@ -241,7 +251,7 @@ async function deleteTrack(id) {
 
 async function loadTracks() {
   try {
-    const response = await fetch(`${API_BASE}/api/tracks`);
+    const response = await authFetch("/api/tracks");
     const data = await readJSON(response);
     if (!response.ok) throw new Error(data.error || "Не удалось загрузить треки");
     state.tracks = Array.isArray(data) ? data : [];

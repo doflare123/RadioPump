@@ -53,6 +53,44 @@ func TestTrackFileStorageRejectsWrongHeader(t *testing.T) {
 	}
 }
 
+func TestTrackFileStorageAcceptsSupportedContainerHeaders(t *testing.T) {
+	tests := []struct {
+		name   string
+		header []byte
+		format string
+	}{
+		{"track.flac", []byte("fLaCmetadata"), "flac"},
+		{"track.mp2", []byte{0xff, 0xfd, 0x90, 0}, "mp3"},
+		{"track.ogg", []byte("OggSmetadata"), "ogg"},
+		{"track.opus", []byte("OggSmetadata"), "ogg"},
+		{"track.m4a", append([]byte{0, 0, 0, 24}, []byte("ftypM4A metadata")...), "m4a"},
+		{"track.aac", []byte{0xff, 0xf1, 0x50, 0x80}, "aac"},
+		{"track.aiff", []byte("FORMxxxxAIFFmetadata"), "aiff"},
+		{"track.wma", []byte{0x30, 0x26, 0xb2, 0x75, 0x8e, 0x66, 0xcf, 0x11, 0xa6, 0xd9, 0, 0xaa, 0, 0x62, 0xce, 0x6c}, "asf"},
+		{"track.ape", []byte("MAC metadata"), "ape"},
+		{"track.wv", []byte("wvpkmetadata"), "wv"},
+		{"track.mka", []byte{0x1a, 0x45, 0xdf, 0xa3}, "matroska"},
+		{"track.mpc", []byte("MPCKmetadata"), "musepack"},
+		{"track.dsf", []byte("DSD metadata"), "dsf"},
+		{"track.dff", []byte("FRM8xxxx....DSD metadata"), "dsdiff"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			storage, err := NewTrackFileStorage(t.TempDir(), 1024)
+			if err != nil {
+				t.Fatal(err)
+			}
+			saved, err := storage.Save(bytes.NewReader(tt.header), tt.name)
+			if err != nil {
+				t.Fatalf("Save() error = %v", err)
+			}
+			if saved.Format != tt.format {
+				t.Fatalf("Format = %q, want %q", saved.Format, tt.format)
+			}
+		})
+	}
+}
+
 func minimalWAV() []byte {
 	return []byte{
 		'R', 'I', 'F', 'F',

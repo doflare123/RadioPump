@@ -234,16 +234,18 @@ func sanitizeAudioFileName(originalName string) (string, string) {
 	return cleanBase, ext
 }
 
+// isAllowedExtension перечисляет имена контейнеров, которые понимает браузерная
+// форма и может транскодировать FFmpeg. Содержимое дополнительно проверяется ниже.
 func isAllowedExtension(ext string) bool {
 	switch ext {
-	case ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac":
+	case ".mp3", ".mp2", ".mpa", ".wav", ".wave", ".flac", ".ogg", ".oga", ".opus", ".spx", ".m4a", ".m4b", ".mp4", ".alac", ".aac", ".aif", ".aiff", ".aifc", ".wma", ".ape", ".wv", ".mka", ".webm", ".mpc", ".dsf", ".dff":
 		return true
 	default:
 		return false
 	}
 }
 
-// Делает дешевую проверку контейнера по magic bytes.
+// validateAudioHeader делает дешевую проверку контейнера по magic bytes.
 // Полный decode аудио здесь не выполняется: это дорого и потребовало бы
 // дополнительных codec-зависимостей.
 func validateAudioHeader(header []byte, size int64, ext string) (string, error) {
@@ -252,11 +254,14 @@ func validateAudioHeader(header []byte, size int64, ext string) (string, error) 
 	}
 
 	switch ext {
-	case ".mp3":
+	case ".mp3", ".mp2", ".mpa":
 		if hasID3Header(header) || hasMPEGFrameSync(header) {
 			return "mp3", nil
 		}
-	case ".wav":
+	case ".wav", ".wave":
+		if len(header) >= 12 && string(header[:4]) == "RF64" && string(header[8:12]) == "WAVE" {
+			return "wav", nil
+		}
 		if len(header) >= 12 && string(header[:4]) == "RIFF" && string(header[8:12]) == "WAVE" {
 			if len(header) >= 8 {
 				riffSize := int64(binary.LittleEndian.Uint32(header[4:8])) + 8
@@ -270,17 +275,49 @@ func validateAudioHeader(header []byte, size int64, ext string) (string, error) 
 		if len(header) >= 4 && string(header[:4]) == "fLaC" {
 			return "flac", nil
 		}
-	case ".ogg":
+	case ".ogg", ".oga", ".opus", ".spx":
 		if len(header) >= 4 && string(header[:4]) == "OggS" {
 			return "ogg", nil
 		}
-	case ".m4a":
+	case ".m4a", ".m4b", ".mp4", ".alac":
 		if hasMP4FileType(header) {
 			return "m4a", nil
 		}
 	case ".aac":
-		if hasADTSHeader(header) {
+		if hasADTSHeader(header) || hasID3Header(header) {
 			return "aac", nil
+		}
+	case ".aif", ".aiff", ".aifc":
+		if len(header) >= 12 && string(header[:4]) == "FORM" && (string(header[8:12]) == "AIFF" || string(header[8:12]) == "AIFC") {
+			return "aiff", nil
+		}
+	case ".wma":
+		if bytes.HasPrefix(header, []byte{0x30, 0x26, 0xb2, 0x75, 0x8e, 0x66, 0xcf, 0x11, 0xa6, 0xd9, 0, 0xaa, 0, 0x62, 0xce, 0x6c}) {
+			return "asf", nil
+		}
+	case ".ape":
+		if string(header[:4]) == "MAC " {
+			return "ape", nil
+		}
+	case ".wv":
+		if string(header[:4]) == "wvpk" {
+			return "wv", nil
+		}
+	case ".mka", ".webm":
+		if bytes.Equal(header[:4], []byte{0x1a, 0x45, 0xdf, 0xa3}) {
+			return "matroska", nil
+		}
+	case ".mpc":
+		if string(header[:4]) == "MPCK" || string(header[:3]) == "MP+" {
+			return "musepack", nil
+		}
+	case ".dsf":
+		if string(header[:4]) == "DSD " {
+			return "dsf", nil
+		}
+	case ".dff":
+		if len(header) >= 16 && string(header[:4]) == "FRM8" && string(header[12:16]) == "DSD " {
+			return "dsdiff", nil
 		}
 	}
 
@@ -300,14 +337,6 @@ func hasADTSHeader(header []byte) bool {
 }
 
 func hasMP4FileType(header []byte) bool {
-	if len(header) < 12 || string(header[4:8]) != "ftyp" {
-		return false
-	}
-	brand := string(header[8:12])
-	switch brand {
-	case "M4A ", "M4B ", "mp41", "mp42", "isom":
-		return true
-	default:
-		return false
-	}
+	// Browser-анализатор проверяет codec внутри; список совместимых MP4 brands открыт.
+	return len(header) >= 12 && string(header[4:8]) == "ftyp"
 }
