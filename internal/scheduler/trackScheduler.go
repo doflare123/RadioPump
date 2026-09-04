@@ -16,6 +16,7 @@ type Scheduler interface {
 	RegisterStation(id string, tags []string) error
 	NextTrackID(stationID string) (uint, error)
 	MarkDirty(stationID string) error
+	MarkAllDirty()
 	QueueSnapshot(stationID string) (StationSnapshot, error)
 	CurrentTrackID(stationID string) (uint, error)
 }
@@ -114,6 +115,16 @@ func (s *scheduler) MarkDirty(stationID string) error {
 		return ErrStationNotFound
 	}
 	return nil
+}
+
+// MarkAllDirty помечает все очереди после изменения библиотеки или справочника тегов.
+// Пересборка выполняется лениво при следующем запросе трека каждой станции.
+func (s *scheduler) MarkAllDirty() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, station := range s.Stations {
+		station.Dirty = true
+	}
 }
 
 func (s *scheduler) unMarkDirty(stationID string) {

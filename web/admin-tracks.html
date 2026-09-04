@@ -57,6 +57,11 @@
                 <label for="duration">Длительность, сек</label>
                 <input id="duration" name="duration" type="number" min="0" step="1" />
               </div>
+              <!-- С треком отправляются только ID выбранных серверных тегов. -->
+              <fieldset class="tag-fieldset">
+                <legend>Теги станций <span class="muted">(необязательно)</span></legend>
+                <div class="tag-options" data-upload-tags></div>
+              </fieldset>
               <details>
                 <summary>Дополнительные сведения из файла</summary>
                 <dl class="metadata-details" data-metadata-details></dl>
@@ -77,6 +82,7 @@
                   <th>Название</th>
                   <th>Исполнитель</th>
                   <th>Альбом</th>
+                  <th>Теги станций</th>
                   <th></th>
                 </tr>
               </thead>
@@ -85,7 +91,47 @@
           </div>
         </div>
       </section>
+
+      <!-- Отдельный справочник управляет допустимыми тегами для всех треков. -->
+      <section class="panel">
+        <div class="panel__body stack">
+          <div>
+            <h2>Справочник тегов станций</h2>
+            <p class="muted">Только теги из этого списка можно назначать трекам. Теги, используемые волнами в config.yaml, нельзя переименовать или удалить.</p>
+          </div>
+          <form class="tag-create" data-tag-form>
+            <div class="field">
+              <label for="tag-name">Новый тег</label>
+              <input id="tag-name" name="name" maxlength="64" autocomplete="off" required />
+            </div>
+            <button class="button button--primary" type="submit">Добавить</button>
+          </form>
+          <div class="status" data-tag-status role="status" aria-live="polite"></div>
+          <div class="tag-manager" data-tag-manager></div>
+        </div>
+      </section>
     </main>
+
+    <!-- Диалог позволяет менять метаданные и связи без произвольного ввода тегов. -->
+    <dialog class="edit-dialog" data-track-dialog>
+      <form class="form" data-edit-track-form>
+        <input name="id" type="hidden" />
+        <h2>Изменить трек</h2>
+        <div class="field"><label for="edit-title">Название</label><input id="edit-title" name="title" required /></div>
+        <div class="field"><label for="edit-artist">Исполнитель</label><input id="edit-artist" name="artist" /></div>
+        <div class="field"><label for="edit-album">Альбом</label><input id="edit-album" name="album" /></div>
+        <div class="field"><label for="edit-duration">Длительность, сек</label><input id="edit-duration" name="duration" type="number" min="0" step="1" /></div>
+        <fieldset class="tag-fieldset">
+          <legend>Теги станций <span class="muted">(необязательно)</span></legend>
+          <div class="tag-options" data-edit-tags></div>
+        </fieldset>
+        <div class="status" data-edit-track-status role="status" aria-live="polite"></div>
+        <div class="dialog-actions">
+          <button class="button" type="button" data-close-track-dialog>Отмена</button>
+          <button class="button button--primary" type="submit">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
 
     <script src="config.js"></script>
     <script src="app.js"></script>

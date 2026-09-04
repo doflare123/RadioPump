@@ -13,6 +13,7 @@ const WS_URL =
 
 const state = {
   tracks: [],
+  tags: [],
   currentTrack: null,
 };
 
@@ -137,8 +138,139 @@ async function initAdminTracks() {
     });
   }
 
+  setupTagManagement();
+  setupTrackEditor();
+  await refreshTags();
   await setupUploadForm();
   await refreshAdminTracks();
+}
+
+// Загружает единый справочник и одновременно обновляет все tag selectors админки.
+async function refreshTags() {
+  const uploadSelected = selectedTagIDs(document.querySelector("[data-upload-tags]"));
+  const editSelected = selectedTagIDs(document.querySelector("[data-edit-tags]"));
+  const response = await authFetch("/api/admin/tags");
+  const data = await readJSON(response);
+  if (!response.ok) throw new Error(data.error || "Не удалось загрузить теги");
+  state.tags = Array.isArray(data) ? data : [];
+  renderTagOptions(document.querySelector("[data-upload-tags]"), uploadSelected);
+  renderTagOptions(document.querySelector("[data-edit-tags]"), editSelected);
+  renderTagManager();
+}
+
+// Рисует checkbox-список только из серверного справочника; имя не отправляется с треком.
+function renderTagOptions(container, selectedIDs = []) {
+  if (!container) return;
+  const selected = new Set(selectedIDs.map(String));
+  container.replaceChildren();
+  if (state.tags.length === 0) {
+    container.textContent = "Тегов пока нет";
+    return;
+  }
+  for (const tag of state.tags) {
+    const label = document.createElement("label");
+    label.className = "tag-option";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "tag_ids";
+    input.value = String(tag.ID);
+    input.checked = selected.has(String(tag.ID));
+    label.append(input, document.createTextNode(tag.Name));
+    container.appendChild(label);
+  }
+}
+
+// Возвращает выбранные ID из checkbox-контейнера; отсутствующий контейнер означает [].
+function selectedTagIDs(container) {
+  if (!container) return [];
+  return [...container.querySelectorAll('input[name="tag_ids"]:checked')]
+    .map((input) => Number(input.value))
+    .filter((id) => Number.isSafeInteger(id) && id > 0);
+}
+
+// Подключает создание тега; rename/delete listeners создаются при каждом render списка.
+function setupTagManagement() {
+  const form = document.querySelector("[data-tag-form]");
+  const status = document.querySelector("[data-tag-status]");
+  if (!form || !status) return;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    status.textContent = "Добавление…";
+    const name = String(new FormData(form).get("name") || "");
+    try {
+      await mutateTag("/api/admin/tags", "POST", name);
+      form.reset();
+      status.textContent = "Тег добавлен";
+      await refreshTags();
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  });
+}
+
+// Строит редактируемые chips справочника безопасными DOM-операциями.
+function renderTagManager() {
+  const container = document.querySelector("[data-tag-manager]");
+  const status = document.querySelector("[data-tag-status]");
+  if (!container || !status) return;
+  container.replaceChildren();
+  if (state.tags.length === 0) {
+    container.textContent = "Справочник пуст";
+    return;
+  }
+  for (const tag of state.tags) {
+    const editor = document.createElement("div");
+    editor.className = "tag-editor";
+    const input = document.createElement("input");
+    input.value = tag.Name;
+    input.maxLength = 64;
+    input.setAttribute("aria-label", `Имя тега ${tag.Name}`);
+    const save = document.createElement("button");
+    save.className = "button";
+    save.type = "button";
+    save.textContent = "Сохранить";
+    const remove = document.createElement("button");
+    remove.className = "button button--danger";
+    remove.type = "button";
+    remove.textContent = "Удалить";
+    // Rename оставляет ID прежним, поэтому назначенные трекам связи сохраняются.
+    save.addEventListener("click", async () => {
+      status.textContent = "Сохранение…";
+      try {
+        await mutateTag(`/api/admin/tags/${tag.ID}`, "PUT", input.value);
+        status.textContent = "Тег переименован";
+        await refreshTags();
+        await refreshAdminTracks();
+      } catch (error) { status.textContent = error.message; }
+    });
+    // Подтверждение сообщает о каскадном снятии тега со всех треков.
+    remove.addEventListener("click", async () => {
+      if (!confirm(`Удалить тег «${tag.Name}» со всех треков?`)) return;
+      status.textContent = "Удаление…";
+      try {
+        const response = await authFetch(`/api/admin/tags/${tag.ID}`, { method: "DELETE" });
+        const data = await readJSON(response);
+        if (!response.ok) throw new Error(data.error || "Не удалось удалить тег");
+        status.textContent = "Тег удалён";
+        await refreshTags();
+        await refreshAdminTracks();
+      } catch (error) { status.textContent = error.message; }
+    });
+    editor.append(input, save, remove);
+    container.appendChild(editor);
+  }
+}
+
+// Отправляет одинаковый JSON-контракт для create и rename тега.
+async function mutateTag(path, method, name) {
+  const response = await authFetch(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const data = await readJSON(response);
+  if (!response.ok) throw new Error(data.error || "Не удалось изменить тег");
+  return data;
 }
 
 async function setupUploadForm() {
@@ -184,7 +316,7 @@ async function refreshAdminTracks() {
 
   tbody.innerHTML = "";
   if (tracks.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="muted">Треков пока нет</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">Треков пока нет</td></tr>`;
     return;
   }
 
@@ -194,6 +326,7 @@ async function refreshAdminTracks() {
       <td>${escapeHTML(track.Title || "Без названия")}</td>
       <td>${escapeHTML(track.Artist || "—")}</td>
       <td>${escapeHTML(track.Album || "—")}</td>
+      <td><div class="tag-list">${(track.Tags || []).map((tag) => `<span class="tag-chip">${escapeHTML(tag.Name)}</span>`).join("") || "—"}</div></td>
       <td>
         <button class="button" type="button" data-edit="${track.ID}">Изменить</button>
         <button class="button button--danger" type="button" data-delete="${track.ID}">Удалить</button>
@@ -213,32 +346,57 @@ async function refreshAdminTracks() {
     button.addEventListener("click", async () => {
       const track = state.tracks.find((item) => String(item.ID) === button.dataset.edit);
       if (!track) return;
-      await editTrack(track);
-      await refreshAdminTracks();
+      editTrack(track);
     });
   });
 }
 
-async function editTrack(track) {
-  const title = prompt("Название", track.Title || "");
-  if (title === null) return;
-  const artist = prompt("Исполнитель", track.Artist || "");
-  if (artist === null) return;
-  const album = prompt("Альбом", track.Album || "");
-  if (album === null) return;
+// Открывает единый editor трека и отмечает его текущие связи с тегами.
+function editTrack(track) {
+  const dialog = document.querySelector("[data-track-dialog]");
+  const form = document.querySelector("[data-edit-track-form]");
+  if (!dialog || !form) return;
+  form.elements.id.value = track.ID;
+  form.elements.title.value = track.Title || "";
+  form.elements.artist.value = track.Artist || "";
+  form.elements.album.value = track.Album || "";
+  form.elements.duration.value = track.Duration || 0;
+  const status = document.querySelector("[data-edit-track-status]");
+  if (status) status.textContent = "";
+  renderTagOptions(document.querySelector("[data-edit-tags]"), (track.Tags || []).map((tag) => tag.ID));
+  dialog.showModal();
+}
 
-  const response = await authFetch(`/api/admin/tracks/${track.ID}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      title,
-      artist,
-      album,
-      duration: track.Duration || 0,
-    }),
+// Подключает сохранение editor-а один раз, а содержимое формы меняется при открытии.
+function setupTrackEditor() {
+  const dialog = document.querySelector("[data-track-dialog]");
+  const form = document.querySelector("[data-edit-track-form]");
+  const status = document.querySelector("[data-edit-track-status]");
+  if (!dialog || !form || !status) return;
+  document.querySelector("[data-close-track-dialog]")?.addEventListener("click", () => dialog.close());
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    status.textContent = "Сохранение…";
+    const payload = {
+      title: form.elements.title.value,
+      artist: form.elements.artist.value,
+      album: form.elements.album.value,
+      duration: Number(form.elements.duration.value) || 0,
+      tag_ids: selectedTagIDs(form.querySelector("[data-edit-tags]")),
+    };
+    try {
+      const response = await authFetch(`/api/admin/tracks/${form.elements.id.value}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await readJSON(response);
+      if (!response.ok) throw new Error(data.error || "Не удалось обновить трек");
+      dialog.close();
+      status.textContent = "";
+      await refreshAdminTracks();
+    } catch (error) { status.textContent = error.message; }
   });
-  const data = await readJSON(response);
-  if (!response.ok) alert(data.error || "Не удалось обновить трек");
 }
 
 async function deleteTrack(id) {

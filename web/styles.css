@@ -373,6 +373,96 @@ select {
   overflow-wrap: anywhere;
 }
 
+/* Элементы справочника тегов остаются компактными и переносятся на узких экранах. */
+.tag-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.tag-fieldset legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.tag-options,
+.tag-manager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-option,
+.tag-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+}
+
+.tag-option input {
+  width: auto;
+  min-height: auto;
+  margin: 0;
+}
+
+.tag-editor input {
+  width: 150px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+.tag-create {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+}
+
+.tag-create .field {
+  flex: 1;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 12px;
+}
+
+.edit-dialog {
+  width: min(560px, calc(100% - 24px));
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.edit-dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .footer-player {
   position: fixed;
   right: 16px;
@@ -426,5 +516,10 @@ select {
     display: block;
     overflow-x: auto;
     white-space: nowrap;
+  }
+
+  .tag-create {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

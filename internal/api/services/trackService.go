@@ -17,17 +17,40 @@ type TrackMetadata struct {
 	Artist   string
 	Album    string
 	Duration uint
+	TagIDs   []uint
+}
+
+// StationInvalidator скрывает реализацию scheduler от библиотечных сервисов.
+// Plugin может заменить уведомление, сохранив этот маленький контракт.
+type StationInvalidator interface {
+	MarkAllDirty()
+}
+
+// TrackCatalog — контракт сценариев библиотеки, от которого зависит HTTP handler.
+type TrackCatalog interface {
+	GetAllTracks() ([]models.Track, error)
+	GetByID(id uint) (*models.Track, error)
+	Create(track *models.Track) error
+	MaxUploadBytes() int64
+	StoreUploadedFile(src io.Reader, originalName string) (*media.SavedTrackFile, error)
+	DiscardUploadedFile(saved *media.SavedTrackFile)
+	CreateUploadedTrack(meta TrackMetadata, saved *media.SavedTrackFile) (*models.Track, error)
+	Update(track *models.Track) error
+	Delete(id uint) error
 }
 
 type TrackService struct {
 	repo      repository.TrackRepository
 	fileStore media.TrackFileStore
+	stations  StationInvalidator
 }
+
+var _ TrackCatalog = (*TrackService)(nil)
 
 // Принимает интерфейсы, а не конкретные реализации хранилищ.
 // Так форки проекта смогут заменить repository или файловое хранилище без переписывания HTTP handlers.
-func NewTrackService(repo repository.TrackRepository, fileStore media.TrackFileStore) *TrackService {
-	return &TrackService{repo: repo, fileStore: fileStore}
+func NewTrackService(repo repository.TrackRepository, fileStore media.TrackFileStore, stations StationInvalidator) *TrackService {
+	return &TrackService{repo: repo, fileStore: fileStore, stations: stations}
 }
 
 func (s *TrackService) GetAllTracks() ([]models.Track, error) {
@@ -39,7 +62,15 @@ func (s *TrackService) GetByID(id uint) (*models.Track, error) {
 }
 
 func (s *TrackService) Create(track *models.Track) error {
-	return s.repo.Create(track)
+	if err := s.repo.Create(track); err != nil {
+		return err
+	}
+	s.markStationsDirty()
+	// Повторное чтение заполняет имена тегов для JSON-ответа, а не только их ID.
+	if created, err := s.repo.GetByID(track.ID); err == nil {
+		*track = *created
+	}
+	return nil
 }
 
 // Нужен HTTP-слою для раннего ограничения multipart body.
@@ -84,18 +115,27 @@ func (s *TrackService) CreateUploadedTrack(meta TrackMetadata, saved *media.Save
 		Album:    meta.Album,
 		Path:     saved.StoredPath,
 		Duration: uint(meta.Duration),
+		Tags:     tagsFromIDs(meta.TagIDs),
 	}
 
 	if err := s.repo.Create(track); err != nil {
 		s.fileStore.Remove(saved)
 		return nil, err
 	}
+	s.markStationsDirty()
+	if created, err := s.repo.GetByID(track.ID); err == nil {
+		track = created
+	}
 
 	return track, nil
 }
 
 func (s *TrackService) Update(track *models.Track) error {
-	return s.repo.Update(track)
+	if err := s.repo.Update(track); err != nil {
+		return err
+	}
+	s.markStationsDirty()
+	return nil
 }
 
 // Delete удаляет запись трека и связанный с ней файл. Сначала удаляется БД,
@@ -111,5 +151,22 @@ func (s *TrackService) Delete(id uint) error {
 	if s.fileStore != nil {
 		s.fileStore.Remove(&media.SavedTrackFile{AbsolutePath: track.Path})
 	}
+	s.markStationsDirty()
 	return nil
+}
+
+// tagsFromIDs создаёт repository-модель без доверия к клиентским именам тегов.
+func tagsFromIDs(ids []uint) []models.Tag {
+	tags := make([]models.Tag, 0, len(ids))
+	for _, id := range ids {
+		tags = append(tags, models.Tag{ID: id})
+	}
+	return tags
+}
+
+// markStationsDirty не заставляет service знать ID и внутреннее устройство волн.
+func (s *TrackService) markStationsDirty() {
+	if s.stations != nil {
+		s.stations.MarkAllDirty()
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"RadioPump/internal/api/services"
 	"RadioPump/internal/media"
 	"RadioPump/internal/models"
+	"RadioPump/internal/repository"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -25,21 +26,22 @@ const (
 )
 
 type TrackHandler struct {
-	trackService *services.TrackService
+	trackService services.TrackCatalog
 }
 
-func NewTrackHandler(trackService *services.TrackService) *TrackHandler {
+func NewTrackHandler(trackService services.TrackCatalog) *TrackHandler {
 	return &TrackHandler{trackService: trackService}
 }
 
 // trackPayload нужен для JSON-режима. Основной путь создания трека — multipart
 // upload, а JSON оставлен для ручного импорта файла, который уже лежит на сервере.
 type trackPayload struct {
-	Title    string `json:"title"`
-	Artist   string `json:"artist"`
-	Album    string `json:"album"`
-	Path     string `json:"path"`
-	Duration int    `json:"duration"`
+	Title    string  `json:"title"`
+	Artist   string  `json:"artist"`
+	Album    string  `json:"album"`
+	Path     string  `json:"path"`
+	Duration int     `json:"duration"`
+	TagIDs   *[]uint `json:"tag_ids"`
 }
 
 func (h *TrackHandler) ListTracks(w http.ResponseWriter, _ *http.Request) {
@@ -148,6 +150,9 @@ func (h *TrackHandler) createTrackFromMultipart(w http.ResponseWriter, r *http.R
 	}
 
 	track, err := h.trackService.CreateUploadedTrack(meta, saved)
+	if writeTrackTagError(w, err) {
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "не удалось создать трек")
 		return
@@ -173,6 +178,10 @@ func (h *TrackHandler) createTrackFromJSON(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "поле path обязательно для JSON-импорта")
 		return
 	}
+	if payload.Duration < 0 {
+		writeError(w, http.StatusBadRequest, "поле duration должно быть неотрицательным числом")
+		return
+	}
 
 	track := &models.Track{
 		Title:    payload.Title,
@@ -180,9 +189,12 @@ func (h *TrackHandler) createTrackFromJSON(w http.ResponseWriter, r *http.Reques
 		Album:    payload.Album,
 		Path:     payload.Path,
 		Duration: uint(payload.Duration),
+		Tags:     payloadTags(payload.TagIDs),
 	}
 
-	if err := h.trackService.Create(track); err != nil {
+	if err := h.trackService.Create(track); writeTrackTagError(w, err) {
+		return
+	} else if err != nil {
 		writeError(w, http.StatusInternalServerError, "не удалось создать трек")
 		return
 	}
@@ -202,6 +214,10 @@ func (h *TrackHandler) UpdateTrack(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "некорректный json")
 		return
 	}
+	if payload.Duration < 0 {
+		writeError(w, http.StatusBadRequest, "поле duration должно быть неотрицательным числом")
+		return
+	}
 
 	track := &models.Track{
 		ID:       id,
@@ -209,9 +225,13 @@ func (h *TrackHandler) UpdateTrack(w http.ResponseWriter, r *http.Request) {
 		Artist:   payload.Artist,
 		Album:    payload.Album,
 		Duration: uint(payload.Duration),
+		Tags:     payloadTags(payload.TagIDs),
 	}
 
 	err = h.trackService.Update(track)
+	if writeTrackTagError(w, err) {
+		return
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "трек не найден")
 		return
@@ -271,9 +291,41 @@ func readTrackTextField(part multipartPart, meta *services.TrackMetadata) error 
 			return errors.New("поле duration должно быть неотрицательным числом")
 		}
 		meta.Duration = uint(duration)
+	case "tag_ids":
+		id, err := strconv.ParseUint(value, 10, 0)
+		if err != nil || id == 0 {
+			return errors.New("tag_ids должен содержать положительные id")
+		}
+		meta.TagIDs = append(meta.TagIDs, uint(id))
 	}
 
 	return nil
+}
+
+// payloadTags различает отсутствующее поле (сохранить связи при update) и [] (очистить).
+func payloadTags(ids *[]uint) []models.Tag {
+	if ids == nil {
+		return nil
+	}
+	tags := make([]models.Tag, 0, len(*ids))
+	for _, id := range *ids {
+		tags = append(tags, models.Tag{ID: id})
+	}
+	return tags
+}
+
+// writeTrackTagError переводит ошибки проверки связей в стабильный ответ клиента.
+func writeTrackTagError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, repository.ErrUnknownTag):
+		writeError(w, http.StatusBadRequest, "один или несколько тегов не существуют")
+		return true
+	case errors.Is(err, repository.ErrTooManyTags):
+		writeError(w, http.StatusBadRequest, "у трека может быть не больше 128 тегов")
+		return true
+	default:
+		return false
+	}
 }
 
 // multipartPart описывает минимальный набор методов, который нужен helper-у.

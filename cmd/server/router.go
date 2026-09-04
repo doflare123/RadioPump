@@ -4,6 +4,7 @@ import (
 	"RadioPump/internal/api/handlers"
 	adminmiddleware "RadioPump/internal/api/middleware"
 	"RadioPump/internal/api/services"
+	"RadioPump/internal/config"
 	"net/http"
 	"strings"
 	"time"
@@ -22,8 +23,10 @@ func (s *Server) setupRouter() http.Handler {
 	r.Use(timeoutExceptStream(60 * time.Second))
 
 	// Связываем зависимости по слоям: repository -> service -> HTTP handlers.
-	trackService := services.NewTrackService(s.trackRepo, s.fileStorage)
+	trackService := services.NewTrackService(s.trackRepo, s.fileStorage, s.scheduler)
 	trackHandler := handlers.NewTrackHandler(trackService)
+	tagService := services.NewTagService(s.tagRepo, s.scheduler, configuredTagNames(s.cfg.Waves))
+	tagHandler := handlers.NewTagHandler(tagService)
 	listenerHandler := handlers.NewListenerHandler(s.playback)
 
 	authService := services.NewAuthService(
@@ -56,6 +59,10 @@ func (s *Server) setupRouter() http.Handler {
 		r.Post("/tracks", trackHandler.CreateTrack)
 		r.Put("/tracks/{id}", trackHandler.UpdateTrack)
 		r.Delete("/tracks/{id}", trackHandler.DeleteTrack)
+		r.Get("/tags", tagHandler.ListTags)
+		r.Post("/tags", tagHandler.CreateTag)
+		r.Put("/tags/{id}", tagHandler.UpdateTag)
+		r.Delete("/tags/{id}", tagHandler.DeleteTag)
 	})
 
 	// Загруженная музыка публично читается плеером, но запись в эту папку
@@ -66,6 +73,16 @@ func (s *Server) setupRouter() http.Handler {
 	r.Handle("/*", http.FileServer(http.Dir("./web")))
 
 	return adminmiddleware.NewCORS(s.cfg.CORS.AllowedOrigins).Handler(r)
+}
+
+// configuredTagNames разворачивает YAML-конфигурацию в плоский список,
+// не передавая config-модели внутрь service-слоя.
+func configuredTagNames(waves []config.WaveConfig) []string {
+	names := make([]string, 0)
+	for _, wave := range waves {
+		names = append(names, wave.Tags...)
+	}
+	return names
 }
 
 func timeoutExceptStream(timeout time.Duration) func(http.Handler) http.Handler {

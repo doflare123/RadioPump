@@ -23,6 +23,7 @@ type Server struct {
 	storage     *store.Storage
 	fileStorage *media.TrackFileStorage
 	trackRepo   repository.TrackRepository
+	tagRepo     repository.TagRepository
 	scheduler   schedulerpkg.Scheduler
 	playback    *transcoder.PlaybackEngine
 	router      http.Handler
@@ -76,6 +77,7 @@ func NewServer() (*Server, error) {
 		storage:     storage,
 		fileStorage: fileStorage,
 		trackRepo:   repo,
+		tagRepo:     repo,
 		scheduler:   sched,
 		playback:    playback,
 	}
