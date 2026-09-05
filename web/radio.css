@@ -1,0 +1,48 @@
+/* Раскрытие истории не пересоздаёт карточку или общий audio. */
+.radio-page { padding-bottom:64px; }
+.radio-heading { display:flex; justify-content:space-between; align-items:center; gap:24px; margin:12px 0 32px; }
+.radio-heading h1 { font-size:clamp(30px,5vw,48px); letter-spacing:-.04em; margin:4px 0 10px; }
+.eyebrow { color:var(--accent); font-size:11px; font-weight:750; letter-spacing:.14em; }
+.volume { display:grid; gap:8px; font-size:13px; color:var(--muted); }
+input[type=range] { accent-color:var(--accent); }
+.volume input { min-width:0; width:100%; }
+.station-list { display:grid; gap:28px; }
+.station { overflow:hidden; transition:border-color .2s; }
+.station.is-selected { border-color:var(--accent); }
+.station-header { display:flex; justify-content:space-between; gap:20px; align-items:center; padding:24px 28px; border-bottom:1px solid var(--border); }
+.station-header h2 { margin:0 0 8px; font-size:24px; overflow-wrap:anywhere; }
+.station-tags { display:flex; flex-wrap:wrap; gap:6px; }
+.station-tags span { border-radius:20px; background:var(--panel-2); padding:3px 10px; color:var(--muted); font-size:12px; }
+.station-play { min-width:124px; flex-shrink:0; }
+.station-body { display:grid; grid-template-columns:180px 1fr; gap:32px; padding:28px; align-items:center; }
+.artwork { width:180px; height:180px; display:grid; place-items:center; position:relative; border-radius:18px; background:var(--panel-2); overflow:hidden; }
+.artwork img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.vinyl { width:156px; height:156px; border-radius:50%; display:grid; place-items:center; background:repeating-radial-gradient(circle,#222 0px,#222 2px,#343434 3px,#171717 4px); box-shadow:0 7px 18px #0005; animation:record-spin 7s linear infinite; animation-play-state:paused; }
+.vinyl span { border-radius:50%; display:grid; place-items:center; width:54px; height:54px; background:var(--accent); color:var(--bg); font-weight:800; border:7px solid #151515; }
+.station.is-playing .vinyl { animation-play-state:running; }
+.station-track { min-width:0; }
+.station-track h3 { font-size:clamp(21px,3vw,30px); margin:8px 0; overflow-wrap:anywhere; }
+.station-track p { margin:6px 0; overflow-wrap:anywhere; }
+.artist { font-size:17px; }
+.track-timing { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; margin-top:18px; font-variant-numeric:tabular-nums; }
+progress { width:100%; height:4px; display:block; margin-top:7px; border:0; border-radius:4px; background:var(--panel-2); accent-color:var(--accent); }
+progress::-webkit-progress-bar { background:var(--panel-2); border-radius:4px; }
+progress::-webkit-progress-value { background:var(--accent); border-radius:4px; }
+.connection { min-height:20px; color:var(--muted); font-size:12px; }
+.station-details { border-top:1px solid var(--border); }
+.station-details summary { cursor:pointer; display:flex; align-items:center; justify-content:center; gap:12px; padding:14px; color:var(--muted); font-size:12px; list-style:none; }
+.station-details summary::-webkit-details-marker { display:none; }
+.drawer-handle { width:28px; height:3px; border-radius:4px; background:var(--border); }
+.station-details[open] .drawer-handle { background:var(--accent); }
+.station-schedule { display:grid; grid-template-columns:1fr 1fr; gap:32px; padding:8px 28px 24px; }
+.station-schedule h3 { font-size:14px; margin-bottom:16px; }
+.station-schedule small { color:var(--muted); font-weight:400; margin-left:5px; }
+.station-schedule ol { list-style:none; margin:0; padding:0; }
+.station-schedule li { display:flex; gap:12px; align-items:center; padding:10px 0; border-top:1px solid var(--border); font-size:13px; }
+.station-schedule li > span { color:var(--muted); font-variant-numeric:tabular-nums; }
+.station-schedule li div { min-width:0; overflow-wrap:anywhere; }
+.station-schedule li p { margin:3px 0 0; color:var(--muted); font-size:12px; }
+@keyframes record-spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .vinyl { animation:none; } }
+@media(max-width:860px) { [data-page=radio] .topbar__inner { flex-direction:row; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 0; } [data-page=radio] .brand { margin-right:auto; } [data-page=radio] .nav { order:3; flex-basis:100%; } }
+@media(max-width:600px) { .radio-heading { align-items:flex-start; flex-direction:column; } .volume { width:100%; grid-template-columns:auto 1fr; align-items:center; } .station-header { padding:18px; } .station-body { padding:18px; gap:18px; grid-template-columns:100px 1fr; align-items:start; } .artwork { width:100px; height:100px; border-radius:12px; } .vinyl { width:90px; height:90px; } .vinyl span { width:38px; height:38px; font-size:11px; border-width:4px; } .station-schedule { grid-template-columns:1fr; padding:8px 18px 20px; gap:12px; } .station-play { min-width:100px; } }

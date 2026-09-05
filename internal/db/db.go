@@ -21,6 +21,21 @@ type migration struct {
 
 var migrations = []migration{
 	{version: 1, apply: seedDefaultTags},
+	{version: 2, apply: createFileDeletionQueue},
+	{version: 3, apply: createTrackCovers},
+}
+
+// Обложка живёт в транзакции трека, без отдельного файлового rollback/recovery.
+func createTrackCovers(tx *sql.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE track_covers (track_id INTEGER PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE, data BLOB NOT NULL)`)
+	return err
+}
+
+// createFileDeletionQueue хранит намерение удаления в той же БД, что и трек.
+// Задание переживает перезапуск и удаляется только после успешной очистки диска.
+func createFileDeletionQueue(tx *sql.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE pending_file_deletions (path TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
+	return err
 }
 
 type Storage struct {

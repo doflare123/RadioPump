@@ -19,6 +19,9 @@ type TrackRepository interface {
 	Create(track *models.Track) error
 	Update(track *models.Track) error
 	Delete(id uint) error
+	PendingFileDeletions() ([]string, error)
+	CompleteFileDeletion(path string) error
+	ScheduleFileDeletion(path string) error
 }
 
 // TagRepository описывает справочник допустимых тегов отдельно от HTTP и SQLite.
@@ -74,7 +77,7 @@ func NewScannerRepository(db *sql.DB) ScannerRepository {
 // GetAll загружает треки вместе с полным набором назначенных тегов.
 func (r *SQLiteRepository) GetAll() ([]models.Track, error) {
 	return r.queryTracks(`
-		SELECT t.id, t.title, t.artist, t.album, t.path, t.duration, t.created_at, g.id, g.name
+		SELECT t.id, t.title, t.artist, t.album, t.path, t.duration, t.created_at, EXISTS(SELECT 1 FROM track_covers c WHERE c.track_id = t.id), g.id, g.name
 		FROM tracks t
 		LEFT JOIN track_tags tt ON tt.track_id = t.id
 		LEFT JOIN tags g ON g.id = tt.tag_id
@@ -89,7 +92,7 @@ func (r *SQLiteRepository) GetMusic(tags []string) ([]models.Track, error) {
 
 	placeholders := makePlaceholders(len(tags))
 	query := `
-		SELECT t.id, t.title, t.artist, t.album, t.path, t.duration, t.created_at, all_tags.id, all_tags.name
+		SELECT t.id, t.title, t.artist, t.album, t.path, t.duration, t.created_at, EXISTS(SELECT 1 FROM track_covers c WHERE c.track_id = t.id), all_tags.id, all_tags.name
 		FROM tracks t
 		LEFT JOIN track_tags all_tt ON all_tt.track_id = t.id
 		LEFT JOIN tags all_tags ON all_tags.id = all_tt.tag_id
@@ -111,7 +114,7 @@ func (r *SQLiteRepository) GetMusic(tags []string) ([]models.Track, error) {
 // GetByID использует тот же grouped scan, чтобы одиночный ответ не терял теги.
 func (r *SQLiteRepository) GetByID(id uint) (*models.Track, error) {
 	tracks, err := r.queryTracks(`
-		SELECT t.id, t.title, t.artist, t.album, t.path, t.duration, t.created_at, g.id, g.name
+		SELECT t.id, t.title, t.artist, t.album, t.path, t.duration, t.created_at, EXISTS(SELECT 1 FROM track_covers c WHERE c.track_id = t.id), g.id, g.name
 		FROM tracks t
 		LEFT JOIN track_tags tt ON tt.track_id = t.id
 		LEFT JOIN tags g ON g.id = tt.tag_id
@@ -147,6 +150,11 @@ func (r *SQLiteRepository) Create(track *models.Track) error {
 		return err
 	}
 	track.ID = uint(id)
+	if len(track.CoverData) > 0 {
+		if _, err := tx.Exec(`INSERT INTO track_covers(track_id, data) VALUES (?, ?)`, track.ID, track.CoverData); err != nil {
+			return err
+		}
+	}
 	if err := replaceTrackTags(tx, track.ID, track.Tags); err != nil {
 		return err
 	}
@@ -189,8 +197,15 @@ func (r *SQLiteRepository) Delete(id uint) error {
 		return err
 	}
 	defer tx.Rollback()
+	var path string
+	if err := tx.QueryRow(`SELECT path FROM tracks WHERE id = ?`, id).Scan(&path); err != nil {
+		return err
+	}
 
 	if _, err := tx.Exec(`DELETE FROM track_tags WHERE track_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM track_covers WHERE track_id = ?`, id); err != nil {
 		return err
 	}
 	res, err := tx.Exec(`DELETE FROM tracks WHERE id = ?`, id)
@@ -200,7 +215,43 @@ func (r *SQLiteRepository) Delete(id uint) error {
 	if err := requireAffectedRow(res); err != nil {
 		return err
 	}
+	// Старые JSON-импорты могли ссылаться на один файл несколькими треками.
+	if _, err := tx.Exec(`INSERT OR IGNORE INTO pending_file_deletions(path)
+		SELECT ? WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE path = ?)`, path, path); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+// PendingFileDeletions возвращает незавершённые операции для retry после сбоя.
+func (r *SQLiteRepository) PendingFileDeletions() ([]string, error) {
+	rows, err := r.db.Query(`SELECT path FROM pending_file_deletions ORDER BY created_at, path`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var paths []string
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, err
+		}
+		paths = append(paths, path)
+	}
+	return paths, rows.Err()
+}
+
+// CompleteFileDeletion подтверждает очистку; повторное подтверждение безопасно.
+func (r *SQLiteRepository) CompleteFileDeletion(path string) error {
+	_, err := r.db.Exec(`DELETE FROM pending_file_deletions WHERE path = ?`, path)
+	return err
+}
+
+// ScheduleFileDeletion сохраняет retry для rollback загрузки, когда файл уже
+// записан, но создать трек не удалось. Проверка ссылок остаётся в сервисе очистки.
+func (r *SQLiteRepository) ScheduleFileDeletion(path string) error {
+	_, err := r.db.Exec(`INSERT OR IGNORE INTO pending_file_deletions(path) VALUES (?)`, path)
+	return err
 }
 
 func (r *SQLiteRepository) GetTagId(names []string) ([]uint, error) {
@@ -261,10 +312,14 @@ func scanTracks(rows *sql.Rows) ([]models.Track, error) {
 	positions := make(map[uint]int)
 	for rows.Next() {
 		var t models.Track
+		var hasCover bool
 		var tagID sql.NullInt64
 		var tagName sql.NullString
-		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.Album, &t.Path, &t.Duration, &t.CreatedAt, &tagID, &tagName); err != nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.Album, &t.Path, &t.Duration, &t.CreatedAt, &hasCover, &tagID, &tagName); err != nil {
 			return nil, err
+		}
+		if hasCover {
+			t.CoverURL = fmt.Sprintf("/api/covers/%d", t.ID)
 		}
 		position, exists := positions[t.ID]
 		if !exists {

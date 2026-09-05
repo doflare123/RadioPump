@@ -1,6 +1,9 @@
 package models
 
 type Track struct {
+	// CoverData передаётся только внутри upload-транзакции; публично выдаётся URL.
+	CoverData []byte `json:"-"`
+	CoverURL  string
 	ID        uint
 	Title     string
 	Artist    string

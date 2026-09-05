@@ -2,6 +2,7 @@ package media
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -27,6 +28,7 @@ var (
 	ErrTooLarge           = errors.New("аудиофайл слишком большой")
 	ErrUnsupportedFormat  = errors.New("формат аудио не поддерживается")
 	ErrCorruptAudioHeader = errors.New("заголовок аудиофайла некорректный")
+	ErrUnsafePath         = errors.New("путь должен указывать на обычный файл внутри музыкальной библиотеки")
 )
 
 // Описывает файл, который уже прошел проверку и был записан
@@ -47,13 +49,16 @@ type SavedTrackFile struct {
 type TrackFileStore interface {
 	MaxBytes() int64
 	Save(src io.Reader, originalName string) (*SavedTrackFile, error)
-	Remove(saved *SavedTrackFile)
+	Import(path string) (*SavedTrackFile, error)
+	ValidatePath(path string) error
+	Remove(saved *SavedTrackFile) error
 }
 
 // Стандартная реализация TrackFileStore для локального диска.
 // Она отвечает только за проверку файла и выбор пути сохранения.
 type TrackFileStorage struct {
 	dir      string
+	absDir   string
 	maxBytes int64
 }
 
@@ -72,7 +77,11 @@ func NewTrackFileStorage(dir string, maxBytes int64) (*TrackFileStorage, error) 
 	if err := os.MkdirAll(cleanDir, 0o755); err != nil {
 		return nil, err
 	}
-	return &TrackFileStorage{dir: cleanDir, maxBytes: maxBytes}, nil
+	absDir, err := filepath.Abs(cleanDir)
+	if err != nil {
+		return nil, err
+	}
+	return &TrackFileStorage{dir: cleanDir, absDir: absDir, maxBytes: maxBytes}, nil
 }
 
 // Возвращает максимальный размер полезного аудиофайла без учета
@@ -81,25 +90,45 @@ func (s *TrackFileStorage) MaxBytes() int64 {
 	return s.maxBytes
 }
 
-// Потоково пишет upload во временный файл, проверяет размер и формат,
-// затем переносит файл в стабильный путь music/<safe-name>.<ext>.
-func (s *TrackFileStorage) Save(src io.Reader, originalName string) (*SavedTrackFile, error) {
+// Directory возвращает фактический корень для межпроцессного lock-файла сервера.
+func (s *TrackFileStorage) Directory() string { return s.absDir }
+
+// Save резервирует отдельный каталог через Mkdir, пишет временный файл и
+// публикует его Rename только после проверки и Sync. Одинаковые имена upload
+// никогда не разделяют путь. Все операции ограничены os.Root, включая симлинки.
+func (s *TrackFileStorage) Save(src io.Reader, originalName string) (saved *SavedTrackFile, resultErr error) {
 	baseName, ext := sanitizeAudioFileName(originalName)
 	if !isAllowedExtension(ext) {
 		return nil, ErrUnsupportedFormat
 	}
 
-	tmp, err := os.CreateTemp(s.dir, ".upload-*")
+	root, err := os.OpenRoot(s.absDir)
 	if err != nil {
 		return nil, err
 	}
-	tmpPath := tmp.Name()
-	removeTemp := true
+	defer root.Close()
+	if err := root.MkdirAll(".radiopump", 0o755); err != nil {
+		return nil, err
+	}
+	if info, err := root.Lstat(".radiopump"); err != nil || !info.IsDir() {
+		return nil, ErrUnsafePath
+	}
+	directory := filepath.Join(".radiopump", fmt.Sprintf("%x", randomID()))
+	if err := root.Mkdir(directory, 0o755); err != nil {
+		return nil, err
+	}
+	tmpPath := filepath.Join(directory, ".upload")
+	target := filepath.Join(directory, baseName+ext)
+	published := false
 	defer func() {
-		if removeTemp {
-			_ = os.Remove(tmpPath)
+		if !published {
+			resultErr = errors.Join(resultErr, removeIfExists(root, tmpPath), removeIfExists(root, directory))
 		}
 	}()
+	tmp, err := root.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return nil, err
+	}
 
 	header := &limitedHeaderWriter{limit: defaultHeaderLimit}
 	writer := io.MultiWriter(tmp, header)
@@ -107,9 +136,13 @@ func (s *TrackFileStorage) Save(src io.Reader, originalName string) (*SavedTrack
 	buf := make([]byte, copyBufferSize)
 
 	written, copyErr := io.CopyBuffer(writer, limitedReader, buf)
+	syncErr := tmp.Sync()
 	closeErr := tmp.Close()
 	if copyErr != nil {
 		return nil, copyErr
+	}
+	if syncErr != nil {
+		return nil, syncErr
 	}
 	if closeErr != nil {
 		return nil, closeErr
@@ -126,18 +159,14 @@ func (s *TrackFileStorage) Save(src io.Reader, originalName string) (*SavedTrack
 		return nil, err
 	}
 
-	targetPath, storedPath, err := s.nextAvailablePath(baseName, ext)
-	if err != nil {
+	if err := root.Rename(tmpPath, target); err != nil {
 		return nil, err
 	}
-	if err := os.Rename(tmpPath, targetPath); err != nil {
-		return nil, err
-	}
-	removeTemp = false
+	published = true
 
 	return &SavedTrackFile{
-		StoredPath:   filepath.ToSlash(storedPath),
-		AbsolutePath: targetPath,
+		StoredPath:   filepath.ToSlash(filepath.Join(s.dir, target)),
+		AbsolutePath: filepath.Join(s.absDir, target),
 		OriginalName: originalName,
 		BaseName:     baseName,
 		Extension:    ext,
@@ -148,11 +177,129 @@ func (s *TrackFileStorage) Save(src io.Reader, originalName string) (*SavedTrack
 
 // Удаляет сохраненный файл при откате операции. Например, если SQLite
 // отказалась создать запись после успешной записи файла на диск.
-func (s *TrackFileStorage) Remove(saved *SavedTrackFile) {
+func (s *TrackFileStorage) Remove(saved *SavedTrackFile) error {
 	if saved == nil || saved.AbsolutePath == "" {
-		return
+		return nil
 	}
-	_ = os.Remove(saved.AbsolutePath)
+	if err := s.ValidatePath(saved.AbsolutePath); err != nil {
+		return err
+	}
+	rel, err := s.relativePath(saved.AbsolutePath)
+	if err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(s.absDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	info, err := root.Lstat(rel)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return ErrUnsafePath
+	}
+	return removeIfExists(root, rel)
+}
+
+// randomID использует системный источник случайности; Mkdir всё равно
+// обеспечивает эксклюзивное резервирование даже при совпадении идентификатора.
+func randomID() []byte {
+	id := make([]byte, 16)
+	_, _ = rand.Read(id)
+	return id
+}
+
+// relativePath сохраняет совместимость со старыми CWD-relative путями БД.
+// URL, выход наверх, корень каталога и Windows device paths не являются файлами.
+func (s *TrackFileStorage) relativePath(path string) (string, error) {
+	if strings.TrimSpace(path) == "" || strings.Contains(path, "://") {
+		return "", ErrUnsafePath
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", ErrUnsafePath
+	}
+	rel, err := filepath.Rel(s.absDir, abs)
+	if err != nil || rel == "." || !filepath.IsLocal(rel) {
+		return "", ErrUnsafePath
+	}
+	return rel, nil
+}
+
+// ValidatePath допускает отсутствующий файл для повторяемого удаления, но
+// отвергает ссылки и специальные файлы. Root блокирует выход через родительские ссылки.
+func (s *TrackFileStorage) ValidatePath(path string) error {
+	rel, err := s.relativePath(path)
+	if err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(s.absDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	parts := strings.Split(rel, string(filepath.Separator))
+	for index := range parts {
+		info, err := root.Lstat(filepath.Join(parts[:index+1]...))
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrUnsafePath, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ErrUnsafePath
+		}
+		if index == len(parts)-1 {
+			if !info.Mode().IsRegular() {
+				return ErrUnsafePath
+			}
+		} else if !info.IsDir() {
+			return ErrUnsafePath
+		}
+	}
+	return nil
+}
+
+// Import копирует только существующее локальное аудио из корня библиотеки.
+// Исходник не становится собственностью записи и не удаляется вместе с ней.
+func (s *TrackFileStorage) Import(path string) (*SavedTrackFile, error) {
+	if err := s.ValidatePath(path); err != nil {
+		return nil, err
+	}
+	rel, err := s.relativePath(path)
+	if err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(s.absDir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	file, err := root.Open(rel)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUnsafePath, err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, ErrUnsafePath
+	}
+	return s.Save(file, filepath.Base(rel))
+}
+
+// removeIfExists делает очистку повторяемой, но не скрывает ошибки диска/доступа.
+func removeIfExists(root *os.Root, path string) error {
+	err := root.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 // Запоминает только первые байты upload и не растет вместе
@@ -175,27 +322,6 @@ func (w *limitedHeaderWriter) Write(p []byte) (int, error) {
 
 func (w *limitedHeaderWriter) Bytes() []byte {
 	return w.buf.Bytes()
-}
-
-// Сохраняет читаемое имя файла, но не затирает существующий
-// трек: при конфликте добавляет числовой суффикс.
-func (s *TrackFileStorage) nextAvailablePath(baseName, ext string) (string, string, error) {
-	for i := 0; i < 10_000; i++ {
-		name := baseName + ext
-		if i > 0 {
-			name = fmt.Sprintf("%s-%d%s", baseName, i+1, ext)
-		}
-
-		targetPath := filepath.Join(s.dir, name)
-		_, err := os.Stat(targetPath)
-		if errors.Is(err, os.ErrNotExist) {
-			return targetPath, filepath.Join(s.dir, name), nil
-		}
-		if err != nil {
-			return "", "", err
-		}
-	}
-	return "", "", fmt.Errorf("слишком много файлов с именем %q", baseName)
 }
 
 // Удаляет сегменты пути, управляющие символы и опасную

@@ -128,6 +128,24 @@ export function setupMetadataPreview(form) {
   syncControls();
   return {
     canUpload: () => valid && !parsing && !uploading,
+	// Только явный submit превращает локальный preview в ограниченный JPEG.
+	// Canvas также нормализует WebP/GIF и не отправляет исходный активный формат.
+	async coverForUpload() {
+	  if (!imageURL) return null;
+	  try {
+	    await image.decode();
+	    if (!image.naturalWidth || !image.naturalHeight) return null;
+	    const scale = Math.min(1, 1024 / Math.max(image.naturalWidth, image.naturalHeight));
+	    const canvas = document.createElement("canvas");
+	    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+	    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+	    const ctx = canvas.getContext("2d");
+	    ctx.fillStyle = "#ffffff";
+	    ctx.fillRect(0, 0, canvas.width, canvas.height);
+	    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+	    return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+	  } catch { return null; }
+	},
     setUploading(value) { uploading = value; syncControls(); },
   };
 }

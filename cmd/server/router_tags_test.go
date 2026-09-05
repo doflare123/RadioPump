@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -32,13 +34,18 @@ func TestTagAndTrackHTTPFlow(t *testing.T) {
 	}
 	repo := repository.NewRepository(database)
 	scheduler := schedulerpkg.NewScheduler(repo)
-	files, err := media.NewTrackFileStorage(t.TempDir(), 1024*1024)
+	musicDir := t.TempDir()
+	files, err := media.NewTrackFileStorage(musicDir, 1024*1024)
 	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(musicDir, "tagged.flac")
+	if err := os.WriteFile(source, []byte("fLaCsynthetic-test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{AdminName: "admin", AdminPassword: "password", JWTSecret: "test-secret"},
-		Music:  config.MusicConfig{Dir: t.TempDir(), MaxFileSizeMB: 1},
+		Music:  config.MusicConfig{Dir: musicDir, MaxFileSizeMB: 1},
 		Waves:  []config.WaveConfig{{Name: "rock-wave", Tags: []string{"rock"}}},
 	}
 	server := &Server{cfg: cfg, fileStorage: files, trackRepo: repo, tagRepo: repo, scheduler: scheduler}
@@ -72,7 +79,7 @@ func TestTagAndTrackHTTPFlow(t *testing.T) {
 	}
 
 	trackResponse := performAdminJSON(t, router, token, http.MethodPost, "/api/admin/tracks", map[string]any{
-		"title": "Tagged track", "path": "music/tagged.flac", "tag_ids": []uint{pop},
+		"title": "Tagged track", "path": source, "tag_ids": []uint{pop},
 	})
 	if trackResponse.Code != http.StatusCreated {
 		t.Fatalf("POST track status = %d, body = %s", trackResponse.Code, trackResponse.Body.String())
@@ -85,7 +92,7 @@ func TestTagAndTrackHTTPFlow(t *testing.T) {
 		t.Fatalf("created track tags = %#v", track.Tags)
 	}
 	unknownTag := performAdminJSON(t, router, token, http.MethodPost, "/api/admin/tracks", map[string]any{
-		"title": "Invalid tags", "path": "music/invalid.flac", "tag_ids": []uint{999999},
+		"title": "Invalid tags", "path": source, "tag_ids": []uint{999999},
 	})
 	if unknownTag.Code != http.StatusBadRequest {
 		t.Fatalf("POST unknown tag status = %d, body = %s", unknownTag.Code, unknownTag.Body.String())

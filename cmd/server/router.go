@@ -23,8 +23,10 @@ func (s *Server) setupRouter() http.Handler {
 	r.Use(timeoutExceptStream(60 * time.Second))
 
 	// Связываем зависимости по слоям: repository -> service -> HTTP handlers.
-	trackService := services.NewTrackService(s.trackRepo, s.fileStorage, s.scheduler)
-	trackHandler := handlers.NewTrackHandler(trackService)
+	if s.catalog == nil {
+		s.catalog = services.NewTrackService(s.trackRepo, s.fileStorage, s.scheduler)
+	}
+	trackHandler := handlers.NewTrackHandler(s.catalog)
 	tagService := services.NewTagService(s.tagRepo, s.scheduler, configuredTagNames(s.cfg.Waves))
 	tagHandler := handlers.NewTagHandler(tagService)
 	listenerHandler := handlers.NewListenerHandler(s.playback)
@@ -52,6 +54,12 @@ func (s *Server) setupRouter() http.Handler {
 	r.With(adminOnly.AdminOnly).Get("/api/tracks/{id}", trackHandler.GetTrackByID)
 
 	r.Get("/stream/{name}", listenerHandler.StreamStation)
+	stationIDs := make([]string, 0, len(s.cfg.Waves))
+	for _, wave := range s.cfg.Waves {
+		stationIDs = append(stationIDs, wave.Name)
+	}
+	r.Get("/api/radio", handlers.RadioHandler(services.NewRadioService(s.playback, stationIDs)))
+	r.Get("/api/covers/{id}", handlers.CoverHandler(s.catalog))
 
 	// Админское API: запись файлов, изменение и удаление доступны только админу.
 	r.Route("/api/admin", func(r chi.Router) {
@@ -67,7 +75,7 @@ func (s *Server) setupRouter() http.Handler {
 
 	// Загруженная музыка публично читается плеером, но запись в эту папку
 	// остается только через защищенные админские endpoints.
-	r.Handle("/music/*", http.StripPrefix("/music/", http.FileServer(http.Dir(s.cfg.Music.Dir))))
+	r.Handle("/music/*", http.StripPrefix("/music/", s.fileStorage))
 
 	// Статический сайт на чистом HTML/CSS/JS. Все страницы лежат в web/.
 	r.Handle("/*", http.FileServer(http.Dir("./web")))

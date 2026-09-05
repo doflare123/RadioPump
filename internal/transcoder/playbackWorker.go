@@ -1,53 +1,82 @@
 package transcoder
 
 import (
+	"RadioPump/internal/models"
 	"context"
 	"log"
 	"time"
 )
 
-func (e *PlaybackEngine) runStationWorker(stationID string) {
-	for {
-		trackID, err := e.scheduler.NextTrackID(stationID)
-		if err != nil {
-			log.Printf("станция %s: не удалось получить следующий трек: %v", stationID, err)
-			time.Sleep(time.Second)
-			continue
+// runStationWorker продолжает эфир после повреждённого/удалённого файла.
+// Серия ошибок увеличивает паузу до 30 секунд, исключая цикл запуска FFmpeg
+// на пустой или полностью неисправной библиотеке. Ожидания отменяемы.
+func (e *PlaybackEngine) runStationWorker(station *Station) {
+	delay := time.Second
+	defer e.scheduler.ClearCurrent(station.id)
+	defer station.finishTrack()
+	for station.ctx.Err() == nil {
+		id, err := e.scheduler.NextTrackID(station.id)
+		if err == nil {
+			track, lookupErr := e.repo.GetByID(id)
+			err = lookupErr
+			if err == nil {
+				err = e.streamLiveTrack(station, track)
+			} else {
+				_ = e.scheduler.MarkDirty(station.id)
+			}
 		}
-
-		track, err := e.repo.GetByID(trackID)
-		if err != nil {
-			log.Printf("станция %s: трек %d не найден: %v", stationID, trackID, err)
-			continue
-		}
-
-		station := e.Stations[stationID]
-		if station == nil {
-			log.Printf("станция %s: станция не найдена в playback engine", stationID)
+		if station.ctx.Err() != nil {
 			return
 		}
-		if e.streamer == nil {
-			log.Printf("станция %s: компонент потоковой обработки треков не настроен", stationID)
-			time.Sleep(time.Second)
-			continue
-		}
-
-		if err := e.streamer.StreamTrack(context.Background(), track.Path, station.input); err != nil {
-			log.Printf("станция %s: ffmpeg не смог обработать трек %d: %v", stationID, trackID, err)
-			time.Sleep(time.Second)
-			continue
+		if err != nil {
+			e.scheduler.ClearCurrent(station.id)
+			log.Printf("станция %s: %v; повтор через %s", station.id, err, delay)
+			if !waitRetry(station.ctx, delay) {
+				return
+			}
+			delay = min(delay*2, 30*time.Second)
+		} else {
+			delay = time.Second
 		}
 	}
 }
 
-func (e *PlaybackEngine) SubStation(stationID, listenerID string) bool {
-	if stationID == "" || listenerID == "0" {
-		return false
+// streamLiveTrack отмечает начало на первом аудиочанке, а не при выборе SQL ID.
+// Отдельный ограниченный канал позволяет дождаться encoder при shutdown и не
+// приписывает предыдущему треку данные следующего. Подписки не запускают encoder.
+func (e *PlaybackEngine) streamLiveTrack(station *Station, track *models.Track) error {
+	chunks := make(chan []byte, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- e.streamer.StreamTrack(station.ctx, track.Path, chunks)
+		close(chunks)
+	}()
+	started := false
+	for chunk := range chunks {
+		if len(chunk) == 0 || station.ctx.Err() != nil {
+			continue
+		}
+		if !started {
+			station.beginTrack(track)
+			started = true
+		}
+		station.broadcast(chunk)
 	}
-	station := e.Stations[stationID]
-	if station == nil {
-		return false
+	err := <-done
+	if started {
+		station.finishTrack()
 	}
-	station.Subscribe(listenerID)
-	return true
+	return err
+}
+
+// waitRetry заменяет Sleep, чтобы остановка пустой станции не ждала backoff.
+func waitRetry(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }

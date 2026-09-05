@@ -1,83 +1,42 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RadioPump</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body data-page="home">
-    <header class="topbar">
-      <div class="shell topbar__inner">
-        <a class="brand" href="index.html"><span class="brand__mark">RP</span><span>RadioPump</span></a>
-        <nav class="nav" aria-label="Навигация">
-          <a href="index.html">Главная</a>
-          <a href="library.html">Библиотека</a>
-          <a href="waves.html">Волны</a>
-          <a href="player.html">Плеер</a>
-          <a href="admin-login.html">Админ</a>
-        </nav>
-        <button class="pill" type="button" data-theme-toggle>Тема</button>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RadioPump · Прямой эфир</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="radio.css">
+</head>
+<body data-page="radio">
+  <header class="topbar"><div class="shell topbar__inner">
+    <a class="brand" href="index.html"><span class="brand__mark">RP</span><span>RadioPump</span></a>
+    <nav class="nav" aria-label="Навигация"><a href="index.html">Радио</a><a href="admin-login.html">Админ</a></nav>
+    <button class="pill" type="button" data-theme-toggle>Тема</button>
+  </div></header>
+  <main class="shell page radio-page">
+    <div class="radio-heading"><div><p class="eyebrow">МУЗЫКА В ОБЩЕМ ЭФИРЕ</p><h1>На своей волне</h1><p class="muted">Выбирайте станцию. Музыка уже играет.</p></div>
+      <label class="volume">Громкость <input data-volume type="range" min="0" max="1" step="0.01" value="0.8" aria-label="Громкость эфира"></label>
+    </div>
+    <p data-radio-status class="muted" role="status">Подключаемся к станциям…</p>
+    <div data-stations class="station-list"></div>
+  </main>
+  <template id="station-template">
+    <article class="station panel">
+      <div class="station-header"><div><h2 data-name></h2><div class="station-tags" data-tags></div></div>
+        <button type="button" class="button button--primary station-play" data-play>Слушать</button></div>
+      <div class="station-body">
+        <div class="artwork"><div class="vinyl" aria-label="Обложки нет: виниловая пластинка"><span>RP</span></div><img data-cover hidden alt="Обложка альбома" loading="lazy"></div>
+        <div class="station-track"><p class="eyebrow" data-live>ПРЯМОЙ ЭФИР</p><h3 data-title>Ожидаем музыку</h3><p data-artist class="artist"></p><p data-album class="muted"></p>
+          <div class="track-timing"><span data-elapsed>0:00</span><span data-duration>—</span></div>
+          <progress data-progress max="1" value="0" aria-label="Прошло от трека"></progress>
+          <p class="connection" data-connection role="status"></p>
+        </div>
       </div>
-    </header>
-
-    <main class="shell page">
-      <section class="page-head">
-        <div>
-          <h1>RadioPump</h1>
-          <p>Локальное self-hosted радио с библиотекой треков, волнами и простым веб-плеером.</p>
-        </div>
-        <a class="button button--primary" href="player.html">Открыть плеер</a>
-      </section>
-
-      <section class="grid">
-        <div class="panel span-7">
-          <div class="panel__body player">
-            <div class="now-playing">
-              <div>
-                <div class="track-title" data-current-title>Трек не выбран</div>
-                <div class="track-meta" data-current-artist>Библиотека пуста или еще загружается</div>
-              </div>
-            </div>
-            <audio controls preload="metadata" data-main-audio></audio>
-          </div>
-        </div>
-
-        <div class="panel span-5">
-          <div class="panel__body stack">
-            <h2>Последние треки</h2>
-            <div class="status" data-error></div>
-            <div class="track-list" data-latest-tracks></div>
-          </div>
-        </div>
-
-        <div class="panel span-4">
-          <div class="panel__body stack">
-            <h2>Главная волна</h2>
-            <p class="muted">Плейлист всех доступных треков.</p>
-            <a class="button" href="waves.html">Перейти</a>
-          </div>
-        </div>
-
-        <div class="panel span-4">
-          <div class="panel__body stack">
-            <h2>Библиотека</h2>
-            <p class="muted">Открытый список загруженной музыки.</p>
-            <a class="button" href="library.html">Смотреть</a>
-          </div>
-        </div>
-
-        <div class="panel span-4">
-          <div class="panel__body stack">
-            <h2>Админка</h2>
-            <p class="muted">Загрузка, изменение и удаление треков.</p>
-            <a class="button" href="admin-login.html">Войти</a>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <script src="config.js"></script>
-    <script src="app.js"></script>
-  </body>
+      <details class="station-details"><summary><span class="drawer-handle"></span><span>История и очередь</span></summary>
+        <div class="station-schedule"><section><h3>Уже звучало <small>последние 5</small></h3><ol data-history></ol></section><section><h3>Дальше в эфире <small>следующие 5</small></h3><ol data-queue></ol></section></div>
+      </details>
+    </article>
+  </template>
+  <script src="config.js"></script><script src="app.js"></script><script type="module" src="service/radio.js"></script>
+</body>
 </html>

@@ -1,32 +1,16 @@
 const API_BASE = (window.RadioPumpAPIBase || "").replace(/\/$/, "");
-const WS_URL =
-  window.RadioPumpWSUrl ||
-  `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
-
-// HTTP: все запросы идут через API_BASE.
-// Если сайт запущен отдельно на :5000, укажите в config.js:
-// window.RadioPumpAPIBase = "http://localhost:8080";
-// Если сайт отдается Go-сервером на :8080, API_BASE можно оставить пустым.
-//
-// WebSocket: переменная WS_URL уже готова для будущего endpoint /ws.
-// Сейчас backend WebSocket еще не реализует.
-
 const state = {
   tracks: [],
   tags: [],
-  currentTrack: null,
+
 };
 
 document.addEventListener("DOMContentLoaded", () => {
   setupTheme();
   markActiveNav();
-  setupFooterPlayer();
+
 
   const page = document.body.dataset.page;
-  if (page === "home") initHome();
-  if (page === "library") initLibrary();
-  if (page === "waves") initWaves();
-  if (page === "player") initPlayerPage();
   if (page === "login") initLogin();
   if (page === "admin-tracks") initAdminTracks();
 });
@@ -51,40 +35,6 @@ function markActiveNav() {
       link.classList.add("is-active");
     }
   });
-}
-
-function setupFooterPlayer() {
-  const stored = sessionStorage.getItem("radiopump-current-track");
-  if (!stored) return;
-
-  try {
-    setCurrentTrack(JSON.parse(stored), false);
-  } catch {
-    sessionStorage.removeItem("radiopump-current-track");
-  }
-}
-
-async function initHome() {
-  const tracks = await loadTracks();
-  renderTracks(document.querySelector("[data-latest-tracks]"), tracks.slice(0, 5));
-  hydrateFirstPlayable(tracks);
-}
-
-async function initLibrary() {
-  const tracks = await loadTracks();
-  renderTracks(document.querySelector("[data-track-list]"), tracks);
-}
-
-async function initWaves() {
-  const tracks = await loadTracks();
-  renderTracks(document.querySelector("[data-wave-tracks]"), tracks.slice(0, 6));
-  hydrateFirstPlayable(tracks);
-}
-
-async function initPlayerPage() {
-  const tracks = await loadTracks();
-  renderTracks(document.querySelector("[data-player-playlist]"), tracks);
-  hydrateFirstPlayable(tracks);
 }
 
 function initLogin() {
@@ -291,6 +241,8 @@ async function setupUploadForm() {
     status.textContent = "Загрузка...";
 
     try {
+      const cover = await preview.coverForUpload();
+      if (cover) payload.append("cover", cover, "cover.jpg");
       const response = await authFetch("/api/admin/tracks", {
         method: "POST",
         body: payload,
@@ -401,6 +353,9 @@ function setupTrackEditor() {
 
 async function deleteTrack(id) {
   const response = await authFetch(`/api/admin/tracks/${id}`, { method: "DELETE" });
+  if (response.status === 202) {
+    alert("Трек убран из библиотеки. Сервер повторит удаление файла автоматически, когда файл станет доступен.");
+  }
   if (!response.ok) {
     const data = await readJSON(response);
     alert(data.error || "Не удалось удалить трек");
@@ -419,61 +374,6 @@ async function loadTracks() {
     if (target) target.textContent = error.message;
     return [];
   }
-}
-
-function renderTracks(container, tracks) {
-  if (!container) return;
-  container.innerHTML = "";
-
-  if (!tracks || tracks.length === 0) {
-    container.innerHTML = `<div class="muted">Треков пока нет</div>`;
-    return;
-  }
-
-  tracks.forEach((track) => {
-    const row = document.createElement("div");
-    row.className = "track-row";
-    row.innerHTML = `
-      <div>
-        <div class="track-title">${escapeHTML(track.Title || "Без названия")}</div>
-        <div class="track-meta">${escapeHTML(track.Artist || "Неизвестный исполнитель")}</div>
-      </div>
-      <button class="button button--primary" type="button">Слушать</button>
-    `;
-    row.querySelector("button").addEventListener("click", () => setCurrentTrack(track, true));
-    container.appendChild(row);
-  });
-}
-
-function hydrateFirstPlayable(tracks) {
-  if (!state.currentTrack && tracks.length > 0) {
-    setCurrentTrack(tracks[0], false);
-  }
-}
-
-function setCurrentTrack(track, autoplay) {
-  state.currentTrack = track;
-  sessionStorage.setItem("radiopump-current-track", JSON.stringify(track));
-
-  document.querySelectorAll("[data-current-title]").forEach((node) => {
-    node.textContent = track.Title || "Без названия";
-  });
-  document.querySelectorAll("[data-current-artist]").forEach((node) => {
-    node.textContent = track.Artist || "Неизвестный исполнитель";
-  });
-  document.querySelectorAll("audio[data-main-audio]").forEach((audio) => {
-    const src = trackURL(track);
-    if (audio.getAttribute("src") !== src) audio.setAttribute("src", src);
-    if (autoplay) audio.play().catch(() => {});
-  });
-}
-
-function trackURL(track) {
-  const path = String(track.Path || "").replaceAll("\\", "/");
-  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("/")) {
-    return path;
-  }
-  return `${API_BASE}/${path}`;
 }
 
 function getToken() {

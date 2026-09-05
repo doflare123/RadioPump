@@ -19,7 +19,7 @@ import (
 const (
 	// Покрывает границы multipart и маленькие текстовые поля.
 	// Сам файл дополнительно ограничен внутри media.TrackFileStorage.
-	multipartOverheadBytes = 1 << 20
+	multipartOverheadBytes = (1 << 20) + media.MaxCoverBytes
 
 	// Защищает handler от больших текстовых form fields.
 	maxTextFieldBytes = 8 << 10
@@ -112,6 +112,18 @@ func (h *TrackHandler) createTrackFromMultipart(w http.ResponseWriter, r *http.R
 			return
 		}
 
+		// Обложка может идти до или после аудио; ошибка откатывает сохранённый файл.
+		if part.FormName() == "cover" {
+			data, readErr := io.ReadAll(io.LimitReader(part, media.MaxCoverBytes+1))
+			if readErr != nil || len(meta.CoverData) > 0 || media.ValidateCover(data) != nil {
+				h.trackService.DiscardUploadedFile(saved)
+				writeError(w, http.StatusBadRequest, media.ErrInvalidCover.Error())
+				return
+			}
+			meta.CoverData = data
+			_ = part.Close()
+			continue
+		}
 		if part.FileName() != "" {
 			if part.FormName() != "file" {
 				_ = part.Close()
@@ -164,6 +176,7 @@ func (h *TrackHandler) createTrackFromMultipart(w http.ResponseWriter, r *http.R
 // createTrackFromJSON нужен для ручного импорта записей, когда файл уже лежит
 // на сервере. Обычная админская загрузка должна использовать multipart.
 func (h *TrackHandler) createTrackFromJSON(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	var payload trackPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		writeError(w, http.StatusBadRequest, "некорректный json")
@@ -257,6 +270,14 @@ func (h *TrackHandler) DeleteTrack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = h.trackService.Delete(id)
+	if errors.Is(err, services.ErrFileDeletionPending) {
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "file_deletion_pending"})
+		return
+	}
+	if errors.Is(err, media.ErrUnsafePath) {
+		writeError(w, http.StatusBadRequest, media.ErrUnsafePath.Error())
+		return
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "трек не найден")
 		return
@@ -317,6 +338,12 @@ func payloadTags(ids *[]uint) []models.Tag {
 // writeTrackTagError переводит ошибки проверки связей в стабильный ответ клиента.
 func writeTrackTagError(w http.ResponseWriter, err error) bool {
 	switch {
+	case errors.Is(err, media.ErrUnsafePath), errors.Is(err, media.ErrUnsupportedFormat), errors.Is(err, media.ErrCorruptAudioHeader), errors.Is(err, media.ErrEmptyFile):
+		writeError(w, http.StatusBadRequest, err.Error())
+		return true
+	case errors.Is(err, media.ErrTooLarge):
+		writeError(w, http.StatusRequestEntityTooLarge, media.ErrTooLarge.Error())
+		return true
 	case errors.Is(err, repository.ErrUnknownTag):
 		writeError(w, http.StatusBadRequest, "один или несколько тегов не существуют")
 		return true

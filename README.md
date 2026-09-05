@@ -2,6 +2,9 @@
 
 [English](#english) | [Русский](#русский)
 
+> Current implementation and operational limits: [File safety and streaming](docs/reliability.md).
+> Реализованное поведение, проверки и ограничения: [Безопасные файлы и эфир](docs/reliability.md).
+
 ---
 
 ## English
@@ -18,9 +21,9 @@ A lightweight, highly customizable, open-source audio streaming and radio server
 
 ### 🚀 How It Works
 
-1. Drop your music files into the local project directory.
+1. Upload music through the admin page; automatic folder scanning is not implemented yet.
 2. Assign tags to your songs (optional).
-3. The server generates mix-lists on the fly and streams the audio seamlessly.
+3. The server generates queues and streams MP3 at `/stream/{wave}`. Gapless transitions are not guaranteed yet; the home page plays the live stations with five-track history/queue and uploaded covers. See [Live radio page](docs/radio-page.md).
 
 ### 🛠 Wave Configuration (Example `config.yaml`)
 
@@ -62,9 +65,9 @@ You can read the summary of the license terms in the [LICENSE](LICENSE) file or 
 
 ### 🚀 Как это работает
 
-1. Вы кладете свои музыкальные файлы в локальную папку проекта.
+1. Загрузите музыку через административную страницу; автоматическое сканирование папки пока не реализовано.
 2. Задаете теги для песен (опционально).
-3. Сервер генерирует микс-листы на лету и транслирует аудиопоток без пауз.
+3. Сервер формирует очереди и транслирует MP3 через `/stream/{wave}`. Бесшовные переходы пока не гарантируются; главная воспроизводит живые станции с историей/очередью по пять треков и обложками новых загрузок. Подробнее: [Страница радио](docs/radio-page.md).
 
 ### 🛠 Конфигурация волн (Пример `config.yaml`)
 
