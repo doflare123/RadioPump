@@ -1,6 +1,7 @@
 package services
 
 import (
+	"RadioPump/internal/security"
 	"crypto/subtle"
 	"errors"
 	"strings"
@@ -43,10 +44,10 @@ func NewAuthService(adminName, adminPassword, jwtSecret string) *AuthService {
 // Login проверяет логин и пароль постоянным сравнением строк одинаковой длины.
 // Это дешево и убирает очевидную timing-разницу для конфигового пароля.
 func (s *AuthService) Login(name, password string) (string, time.Time, error) {
-	if len(s.jwtSecret) == 0 {
+	if !security.ValidJWTSecret(string(s.jwtSecret)) {
 		return "", time.Time{}, ErrInvalidJWTSecret
 	}
-	if !constantTimeEqual(strings.TrimSpace(name), s.adminName) || !constantTimeEqual(password, s.adminPassword) {
+	if s.adminName == "" || strings.TrimSpace(s.adminPassword) == "" || !constantTimeEqual(strings.TrimSpace(name), s.adminName) || !constantTimeEqual(password, s.adminPassword) {
 		return "", time.Time{}, ErrInvalidCredentials
 	}
 

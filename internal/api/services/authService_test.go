@@ -6,7 +6,7 @@ import (
 )
 
 func TestAuthServiceLoginCreatesToken(t *testing.T) {
-	service := NewAuthService("Admin", "secret", "jwt-secret")
+	service := NewAuthService("Admin", "secret", "0123456789abcdef0123456789abcdef")
 
 	token, expiresAt, err := service.Login("Admin", "secret")
 	if err != nil {
@@ -21,7 +21,7 @@ func TestAuthServiceLoginCreatesToken(t *testing.T) {
 }
 
 func TestAuthServiceLoginRejectsInvalidPassword(t *testing.T) {
-	service := NewAuthService("Admin", "secret", "jwt-secret")
+	service := NewAuthService("Admin", "secret", "0123456789abcdef0123456789abcdef")
 
 	_, _, err := service.Login("Admin", "wrong")
 	if !errors.Is(err, ErrInvalidCredentials) {

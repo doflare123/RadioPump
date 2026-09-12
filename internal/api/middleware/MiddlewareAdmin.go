@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"RadioPump/internal/api/services"
+	"RadioPump/internal/security"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -25,6 +26,11 @@ func NewMiddlewareAdmin(jwtSecret string) MiddlewareAdmin {
 
 func (m *middlewareAdmin) AdminOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Запрещаем доступ, даже если middleware создан в обход проверки при старте.
+		if !security.ValidJWTSecret(string(m.jwtSecret)) {
+			writeAuthError(w, http.StatusServiceUnavailable, "авторизация не настроена")
+			return
+		}
 		tokenString := bearerToken(r.Header.Get("Authorization"))
 		if tokenString == "" {
 			writeAuthError(w, http.StatusUnauthorized, "требуется авторизация")
@@ -37,7 +43,7 @@ func (m *middlewareAdmin) AdminOnly(next http.Handler) http.Handler {
 				return nil, jwt.ErrSignatureInvalid
 			}
 			return m.jwtSecret, nil
-		})
+		}, jwt.WithExpirationRequired())
 		if err != nil || token == nil || !token.Valid {
 			writeAuthError(w, http.StatusUnauthorized, "токен недействителен")
 			return

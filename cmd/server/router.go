@@ -46,7 +46,7 @@ func (s *Server) setupRouter() http.Handler {
 	})
 
 	// Авторизация нужна только для админских операций с файлами и метаданными.
-	r.Post("/api/auth/login", authHandler.Login)
+	r.With(adminmiddleware.NewLoginLimiter()).Post("/api/auth/login", authHandler.Login)
 	r.With(adminOnly.AdminOnly).Get("/api/auth/me", authHandler.Me)
 
 	// Список треков.

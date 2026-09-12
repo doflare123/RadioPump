@@ -1,6 +1,12 @@
 package config
 
-import "github.com/spf13/viper"
+import (
+	"RadioPump/internal/security"
+	"errors"
+	"strings"
+
+	"github.com/spf13/viper"
+)
 
 const defaultMaxMusicFileSizeMB = 20
 
@@ -57,7 +63,25 @@ func NewConfig() (*Config, error) {
 		return nil, err
 	}
 
+	if err := cfg.Server.ValidateAuth(); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
+}
+
+// ValidateAuth отвергает небезопасные настройки до создания файлов и запуска
+// сервисов. Ошибки указывают имена полей, но не раскрывают их значения.
+func (s ServerConfig) ValidateAuth() error {
+	if !security.ValidJWTSecret(s.JWTSecret) {
+		return errors.New("server.jwt_secret: требуется случайный секрет не короче 32 байт без краевых пробелов")
+	}
+	if strings.TrimSpace(s.AdminName) == "" {
+		return errors.New("server.admin_name: требуется непустой логин")
+	}
+	if len(strings.TrimSpace(s.AdminPassword)) < 12 {
+		return errors.New("server.admin_password: требуется пароль не короче 12 байт без учёта краевых пробелов")
+	}
+	return nil
 }
 
 // Переводит человекочитаемый лимит из YAML в байты.

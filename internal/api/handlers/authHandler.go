@@ -31,6 +31,8 @@ func NewAuthHandler(authService *services.AuthService) *AuthHandler {
 // Login принимает учетные данные администратора и возвращает Bearer JWT.
 // Клиент должен отправлять его в заголовке Authorization для админских методов.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	// Ограничиваем память для запросов входа, доступных без авторизации.
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var payload loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		writeError(w, http.StatusBadRequest, "некорректный json")

@@ -44,13 +44,32 @@ func TestTagAndTrackHTTPFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{
-		Server: config.ServerConfig{AdminName: "admin", AdminPassword: "password", JWTSecret: "test-secret"},
+		Server: config.ServerConfig{AdminName: "admin", AdminPassword: "password", JWTSecret: "0123456789abcdef0123456789abcdef"},
 		Music:  config.MusicConfig{Dir: musicDir, MaxFileSizeMB: 1},
 		Waves:  []config.WaveConfig{{Name: "rock-wave", Tags: []string{"rock"}}},
 	}
 	server := &Server{cfg: cfg, fileStorage: files, trackRepo: repo, tagRepo: repo, scheduler: scheduler}
 	router := server.setupRouter()
-	token, _, err := services.NewAuthService("admin", "password", "test-secret").Login("admin", "password")
+	// Реальный маршрут входа использует общий лимит для успешных попыток,
+	// некорректного JSON и неверных паролей. После исчерпания лимита маршруты
+	// с проверкой токена должны оставаться доступными авторизованному пользователю.
+	for i := 0; i < 11; i++ {
+		body, want := `{"name":"admin","password":"wrong"}`, http.StatusUnauthorized
+		if i == 0 {
+			body, want = `{"name":"admin","password":"password"}`, http.StatusOK
+		} else if i == 1 {
+			body, want = `{`, http.StatusBadRequest
+		} else if i == 10 {
+			want = http.StatusTooManyRequests
+		}
+		r := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(body))
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		if w.Code != want {
+			t.Fatalf("login attempt %d: status %d, want %d", i, w.Code, want)
+		}
+	}
+	token, _, err := services.NewAuthService("admin", "password", "0123456789abcdef0123456789abcdef").Login("admin", "password")
 	if err != nil {
 		t.Fatal(err)
 	}

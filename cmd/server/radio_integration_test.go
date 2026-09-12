@@ -72,7 +72,7 @@ func radioFixture(t *testing.T) (*Server, []byte, []byte) {
 	encoder.ValidatePath = files.ValidatePath
 	engine := transcoder.NewPlaybackEngine(repo, sched, encoder)
 	t.Cleanup(engine.Close)
-	cfg := &config.Config{Server: config.ServerConfig{AdminName: "test", AdminPassword: "test", JWTSecret: "radio-test-secret"}, Waves: []config.WaveConfig{{Name: "Main"}, {Name: "Chill", Tags: []string{"ambient"}}}}
+	cfg := &config.Config{Server: config.ServerConfig{AdminName: "test", AdminPassword: "test", JWTSecret: "0123456789abcdef0123456789abcdef"}, Waves: []config.WaveConfig{{Name: "Main"}, {Name: "Chill", Tags: []string{"ambient"}}}}
 	server := &Server{cfg: cfg, trackRepo: repo, tagRepo: repo, fileStorage: files, scheduler: sched, playback: engine}
 	return server, wave, cover.Bytes()
 }
@@ -82,7 +82,7 @@ func radioFixture(t *testing.T) (*Server, []byte, []byte) {
 func TestRadioUploadCoverAndPublicSnapshot(t *testing.T) {
 	server, wave, cover := radioFixture(t)
 	router := server.setupRouter()
-	token, _, _ := services.NewAuthService("test", "test", "radio-test-secret").Login("test", "test")
+	token, _, _ := services.NewAuthService("test", "test", "0123456789abcdef0123456789abcdef").Login("test", "test")
 	upload := func(imageData []byte, badTag bool) *httptest.ResponseRecorder {
 		var body bytes.Buffer
 		writer := multipart.NewWriter(&body)
