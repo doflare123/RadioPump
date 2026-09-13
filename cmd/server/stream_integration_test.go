@@ -62,7 +62,13 @@ func TestLiveHTTPReconnectAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := &Server{cfg: &config.Config{Server: config.ServerConfig{JWTSecret: "test"}, Music: config.MusicConfig{Dir: music}}, trackRepo: repo, tagRepo: repo, scheduler: sched, playback: engine, fileStorage: files}
-	httpServer := httptest.NewServer(server.setupRouter())
+	httpServer := httptest.NewUnstartedServer(server.setupRouter())
+	httpServer.Config = newHTTPServer("", httpServer.Config.Handler)
+	// Эфир должен переживать общий timeout обычных ответов благодаря
+	// обновлению deadline в ListenerHandler перед каждым аудиочанком.
+	httpServer.Config.WriteTimeout = 100 * time.Millisecond
+	httpServer.Listener = limitConnections(httpServer.Listener, maxHTTPConnections)
+	httpServer.Start()
 	defer httpServer.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -171,14 +172,13 @@ func (s *Server) RunContext(ctx context.Context, addr string) error {
 		listenAddr = fmt.Sprintf(":%d", port)
 	}
 
-	srv := &http.Server{
-		Addr:              listenAddr,
-		Handler:           s.router,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      0,
-		IdleTimeout:       60 * time.Second,
+	srv := newHTTPServer(listenAddr, s.router)
+	listener, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return err
 	}
+	listener = limitConnections(listener, maxHTTPConnections)
+	defer listener.Close()
 
 	log.Printf("RadioPump слушает %s", listenAddr)
 	maintenanceCtx, cancel := context.WithCancel(ctx)
@@ -200,7 +200,7 @@ func (s *Server) RunContext(ctx context.Context, addr string) error {
 	}()
 	defer func() { cancel(); <-maintenanceDone }()
 	result := make(chan error, 1)
-	go func() { result <- srv.ListenAndServe() }()
+	go func() { result <- srv.Serve(listener) }()
 	select {
 	case err := <-result:
 		if errors.Is(err, http.ErrServerClosed) {
