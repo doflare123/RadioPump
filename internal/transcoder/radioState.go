@@ -54,17 +54,64 @@ func (s *Station) finishTrack() {
 	s.startedAt = time.Time{}
 }
 
-// Snapshot копирует live-состояние. Очередь — реальные запланированные ID;
-// исчезнувшие из библиотеки записи не раскрываются и будут пропущены worker-ом.
+// Snapshot сохраняет одиночное чтение для внутренних потребителей.
 func (e *PlaybackEngine) Snapshot(id string) (RadioSnapshot, error) {
+	states, err := e.Snapshots([]string{id})
+	if err != nil {
+		return RadioSnapshot{}, err
+	}
+	return states[0], nil
+}
+
+// Snapshots копирует состояние всех волн и получает метаданные очередей одним
+// пакетным вызовом вне блокировок эфира. Порядок и повторы позиций сохраняются;
+// удалённые ID пропускаются, ошибка БД возвращается вызывающему сервису.
+func (e *PlaybackEngine) Snapshots(ids []string) ([]RadioSnapshot, error) {
+	states := make([]RadioSnapshot, 0, len(ids))
+	queues := make([][]uint, 0, len(ids))
+	trackIDs := []uint{}
+	seen := make(map[uint]bool)
+	for _, id := range ids {
+		state, queue, err := e.snapshotIDs(id)
+		if err != nil {
+			return nil, err
+		}
+		states = append(states, state)
+		queues = append(queues, queue)
+		for _, trackID := range queue {
+			if !seen[trackID] {
+				seen[trackID] = true
+				trackIDs = append(trackIDs, trackID)
+			}
+		}
+	}
+	if len(trackIDs) == 0 {
+		return states, nil
+	}
+	tracks, err := e.repo.GetRadioTracks(trackIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i, queue := range queues {
+		for _, id := range queue {
+			if track, ok := tracks[id]; ok {
+				states[i].Queue = append(states[i].Queue, radioTrack(&track))
+			}
+		}
+	}
+	return states, nil
+}
+
+// snapshotIDs снимает только состояние памяти, не выполняя SQL под mutex станции.
+func (e *PlaybackEngine) snapshotIDs(id string) (RadioSnapshot, []uint, error) {
 	if e == nil {
-		return RadioSnapshot{}, ErrStationNotFound
+		return RadioSnapshot{}, nil, ErrStationNotFound
 	}
 	e.mu.RLock()
 	s := e.stations[id]
 	e.mu.RUnlock()
 	if s == nil {
-		return RadioSnapshot{}, ErrStationNotFound
+		return RadioSnapshot{}, nil, ErrStationNotFound
 	}
 	s.mu.Lock()
 	result := RadioSnapshot{ID: id, Tags: append([]string{}, s.tags...), StartedAt: s.startedAt, History: append([]RadioTrack{}, s.history...), Queue: []RadioTrack{}}
@@ -75,13 +122,7 @@ func (e *PlaybackEngine) Snapshot(id string) (RadioSnapshot, error) {
 	queue, err := e.scheduler.QueueSnapshot(id)
 	s.mu.Unlock()
 	if err != nil {
-		return result, err
+		return result, nil, err
 	}
-	for _, trackID := range queue.Queue[:min(5, len(queue.Queue))] {
-		t, err := e.repo.GetByID(trackID)
-		if err == nil {
-			result.Queue = append(result.Queue, radioTrack(t))
-		}
-	}
-	return result, nil
+	return result, queue.Queue[:min(5, len(queue.Queue))], nil
 }

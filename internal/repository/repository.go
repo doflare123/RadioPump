@@ -16,6 +16,7 @@ var (
 type TrackRepository interface {
 	GetAll() ([]models.Track, error)
 	GetByID(id uint) (*models.Track, error)
+	GetRadioTracks(ids []uint) (map[uint]models.Track, error)
 	Create(track *models.Track) error
 	Update(track *models.Track) error
 	Delete(id uint) error

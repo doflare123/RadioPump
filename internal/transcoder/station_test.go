@@ -30,6 +30,11 @@ func (r *memoryLibrary) GetByID(uint) (*models.Track, error) {
 	return &models.Track{ID: 1, Path: "test.wav"}, nil
 }
 
+// Тестовый пакет содержит единственный существующий трек библиотеки.
+func (r *memoryLibrary) GetRadioTracks([]uint) (map[uint]models.Track, error) {
+	return map[uint]models.Track{1: {ID: 1}}, nil
+}
+
 type streamFunc func(context.Context, string, chan<- []byte) error
 
 func (f streamFunc) StreamTrack(ctx context.Context, path string, out chan<- []byte) error {

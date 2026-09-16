@@ -4,10 +4,71 @@ import (
 	"RadioPump/internal/models"
 	"RadioPump/internal/scheduler"
 	"context"
+	"errors"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+// batchRadioLibrary запрещает одиночные lookup при сборке состояния волн.
+type batchRadioLibrary struct {
+	memoryLibrary
+	calls int
+	ids   []uint
+	err   error
+}
+
+func (r *batchRadioLibrary) GetByID(uint) (*models.Track, error) {
+	panic("single lookup in radio snapshot")
+}
+
+func (r *batchRadioLibrary) GetRadioTracks(ids []uint) (map[uint]models.Track, error) {
+	r.calls++
+	r.ids = append([]uint{}, ids...)
+	return map[uint]models.Track{1: {ID: 1, Title: "first"}, 2: {ID: 2, Title: "second"}}, r.err
+}
+
+// fixedRadioQueues позволяет проверить порядок и повторы, включая удалённый ID.
+type fixedRadioQueues struct{ scheduler.Scheduler }
+
+func (fixedRadioQueues) QueueSnapshot(id string) (scheduler.StationSnapshot, error) {
+	return scheduler.StationSnapshot{Queue: []uint{2, 1, 2, 99, 1, 77}}, nil
+}
+
+// Три волны используют один пакет уникальных ID; удалённая запись пропускается,
+// но существующие повторы сохраняют позиции. SQL-ошибка не маскируется пустотой.
+func TestRadioSnapshotsBatchAcrossStations(t *testing.T) {
+	r := &batchRadioLibrary{}
+	e := NewPlaybackEngine(r, fixedRadioQueues{}, nil)
+	for _, id := range []string{"c", "b", "a"} {
+		e.stations[id] = &Station{}
+	}
+	states, err := e.Snapshots([]string{"c", "b", "a"})
+	if err != nil || r.calls != 1 || !reflect.DeepEqual(r.ids, []uint{2, 1, 99}) {
+		t.Fatalf("calls=%d ids=%v err=%v", r.calls, r.ids, err)
+	}
+	for i, id := range []string{"c", "b", "a"} {
+		queue := []uint{}
+		for _, track := range states[i].Queue {
+			queue = append(queue, track.ID)
+		}
+		if states[i].ID != id || !reflect.DeepEqual(queue, []uint{2, 1, 2, 1}) {
+			t.Fatalf("state: %+v", states[i])
+		}
+	}
+	r.err = errors.New("database unavailable")
+	if _, err := e.Snapshots([]string{"a"}); !errors.Is(err, r.err) {
+		t.Fatalf("error: %v", err)
+	}
+	if _, err := e.Snapshots([]string{"missing"}); !errors.Is(err, ErrStationNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+	before := r.calls
+	if states, err := e.Snapshots(nil); err != nil || len(states) != 0 || r.calls != before {
+		t.Fatal("empty catalog queried database")
+	}
+}
 
 // Новые подписчики не запускают encoder и не изменяют время начала текущего трека.
 func TestRadioStateStartsWithAudioAndSurvivesJoining(t *testing.T) {
