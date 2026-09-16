@@ -44,6 +44,24 @@ func NewServer() (*Server, error) {
 		return nil, fmt.Errorf("не удалось загрузить конфиг: %w", err)
 	}
 
+	fileStorage, err := media.NewTrackFileStorage(cfg.Music.Dir, cfg.Music.MaxFileSizeBytes())
+	if err != nil {
+		return nil, fmt.Errorf("не удалось подготовить папку музыки: %w", err)
+	}
+	// Получаем владение библиотекой до открытия БД и миграций: новая версия
+	// не должна менять схему работающего сервера. При ошибке запуска блокировка
+	// освобождается последней, после закрытия БД и остальных зависимостей.
+	lock, err := acquireLibraryLock(fileStorage.Directory())
+	if err != nil {
+		return nil, err
+	}
+	ready := false
+	defer func() {
+		if !ready {
+			_ = lock.Close()
+		}
+	}()
+
 	if err := os.MkdirAll("./data", 0o755); err != nil {
 		return nil, fmt.Errorf("не удалось создать папку data: %w", err)
 	}
@@ -52,7 +70,6 @@ func NewServer() (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("не удалось открыть sqlite: %w", err)
 	}
-	ready := false
 	defer func() {
 		if !ready {
 			_ = db.Close()
@@ -73,21 +90,7 @@ func NewServer() (*Server, error) {
 		return nil, fmt.Errorf("не удалось подготовить схему БД: %w", err)
 	}
 
-	fileStorage, err := media.NewTrackFileStorage(cfg.Music.Dir, cfg.Music.MaxFileSizeBytes())
-	if err != nil {
-		return nil, fmt.Errorf("не удалось подготовить папку музыки: %w", err)
-	}
-
 	storage := store.NewStorage(db)
-	lock, err := acquireLibraryLock(fileStorage.Directory())
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if !ready {
-			_ = lock.Close()
-		}
-	}()
 
 	repo := repository.NewRepository(db)
 	sched := schedulerpkg.NewScheduler(repo)
