@@ -89,10 +89,49 @@ async function initAdminTracks() {
   }
 
   setupTagManagement();
+  document.querySelector("[data-refresh-radio]").addEventListener("click", refreshRadioDiagnostics);
+  await refreshRadioDiagnostics();
   setupTrackEditor();
   await refreshTags();
   await setupUploadForm();
   await refreshAdminTracks();
+}
+
+// Причины FFmpeg выводятся только авторизованному администратору и только как
+// текст. Ручное обновление не создаёт фоновых запросов на странице загрузки.
+async function refreshRadioDiagnostics() {
+  const container = document.querySelector("[data-radio-diagnostics]");
+  const button = document.querySelector("[data-refresh-radio]");
+  button.disabled = true;
+  try {
+    const response = await authFetch("/api/admin/radio");
+    if (!response.ok) throw new Error("Диагностика недоступна. Проверьте авторизацию и обновите страницу.");
+    const stations = await response.json();
+    container.replaceChildren();
+    const labels = { starting: "Подготовка эфира", playing: "Эфир работает", empty: "Нет подходящих треков в библиотеке", decode_error: "Ошибка декодирования / чтения файла", error: "Ошибка сервиса эфира", stopped: "Эфир остановлен" };
+    for (const station of stations) {
+      const title = document.createElement("h3");
+      title.textContent = `${station.id}: ${labels[station.status] || station.status}`;
+      container.append(title);
+      if (station.last_error) {
+        const detail = document.createElement("p");
+        detail.textContent = station.last_error;
+        container.append(detail);
+      }
+      for (const failure of station.failures) {
+        const detail = document.createElement("p");
+        const retry = Date.parse(failure.retry_at);
+        const next = retry > Date.now() ? `повтор не ранее ${new Date(retry).toLocaleString()}` : "ожидает повторного воспроизведения";
+        detail.textContent = `Трек #${failure.track_id}: сбоев подряд — ${failure.attempts}; ${next}. Последний сбой: ${new Date(failure.failed_at).toLocaleString()}. ${failure.reason}`;
+        container.append(detail);
+      }
+    }
+    if (!stations.length) container.textContent = "Станции не настроены.";
+  } catch (error) {
+    container.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // Загружает единый справочник и одновременно обновляет все tag selectors админки.

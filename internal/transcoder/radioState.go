@@ -2,8 +2,38 @@ package transcoder
 
 import (
 	"RadioPump/internal/models"
+	"RadioPump/internal/scheduler"
 	"time"
 )
+
+// StationDiagnostics доступен только через защищённый API; чтение памяти не
+// зависит от работоспособности SQL и сохраняет объяснение системного сбоя.
+type StationDiagnostics struct {
+	ID        string                   `json:"id"`
+	Status    string                   `json:"status"`
+	LastError string                   `json:"last_error"`
+	Failures  []scheduler.TrackFailure `json:"failures"`
+}
+
+// Diagnostics копирует причины ошибок без удержания mutex при HTTP-записи.
+func (e *PlaybackEngine) Diagnostics(ids []string) []StationDiagnostics {
+	result := []StationDiagnostics{}
+	if e == nil {
+		return result
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	for _, id := range ids {
+		if s := e.stations[id]; s != nil {
+			s.mu.Lock()
+			d := StationDiagnostics{ID: id, Status: s.status, LastError: s.lastError}
+			s.mu.Unlock()
+			d.Failures = e.scheduler.Failures(id)
+			result = append(result, d)
+		}
+	}
+	return result
+}
 
 // RadioTrack — публичные сведения без локального пути и бинарных данных обложки.
 type RadioTrack struct {
@@ -18,6 +48,7 @@ type RadioTrack struct {
 }
 
 type RadioSnapshot struct {
+	Status    string       `json:"status"`
 	ID        string       `json:"id"`
 	Tags      []string     `json:"tags"`
 	Current   *RadioTrack  `json:"current"`
@@ -37,6 +68,8 @@ func (s *Station) beginTrack(t *models.Track) {
 	defer s.mu.Unlock()
 	track := radioTrack(t)
 	s.current = &track
+	s.status = "playing"
+	s.lastError = ""
 	s.startedAt = time.Now().UTC()
 	s.current.StartedMS = s.startedAt.UnixMilli()
 }
@@ -51,6 +84,9 @@ func (s *Station) finishTrack() {
 		s.history = s.history[:min(5, len(s.history))]
 	}
 	s.current = nil
+	if s.status == "playing" {
+		s.status = "starting"
+	}
 	s.startedAt = time.Time{}
 }
 
@@ -114,7 +150,7 @@ func (e *PlaybackEngine) snapshotIDs(id string) (RadioSnapshot, []uint, error) {
 		return RadioSnapshot{}, nil, ErrStationNotFound
 	}
 	s.mu.Lock()
-	result := RadioSnapshot{ID: id, Tags: append([]string{}, s.tags...), StartedAt: s.startedAt, History: append([]RadioTrack{}, s.history...), Queue: []RadioTrack{}}
+	result := RadioSnapshot{ID: id, Status: s.status, Tags: append([]string{}, s.tags...), StartedAt: s.startedAt, History: append([]RadioTrack{}, s.history...), Queue: []RadioTrack{}}
 	if s.current != nil {
 		t := *s.current
 		result.Current = &t

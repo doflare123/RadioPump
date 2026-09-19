@@ -2,7 +2,9 @@ package transcoder
 
 import (
 	"RadioPump/internal/models"
+	"RadioPump/internal/scheduler"
 	"context"
+	"errors"
 	"log"
 	"time"
 )
@@ -14,6 +16,7 @@ func (e *PlaybackEngine) runStationWorker(station *Station) {
 	delay := time.Second
 	defer e.scheduler.ClearCurrent(station.id)
 	defer station.finishTrack()
+	defer station.setStatus("stopped", "")
 	for station.ctx.Err() == nil {
 		id, err := e.scheduler.NextTrackID(station.id)
 		if err == nil {
@@ -21,6 +24,9 @@ func (e *PlaybackEngine) runStationWorker(station *Station) {
 			err = lookupErr
 			if err == nil {
 				err = e.streamLiveTrack(station, track)
+				if err == nil {
+					e.scheduler.TrackSucceeded(station.id, id)
+				}
 			} else {
 				_ = e.scheduler.MarkDirty(station.id)
 			}
@@ -30,6 +36,22 @@ func (e *PlaybackEngine) runStationWorker(station *Station) {
 		}
 		if err != nil {
 			e.scheduler.ClearCurrent(station.id)
+			var trackErr *TrackError
+			if errors.As(err, &trackErr) {
+				e.scheduler.TrackFailed(station.id, id, err.Error())
+				station.setStatus("decode_error", err.Error())
+				log.Printf("станция %s: трек %d временно исключён: %v", station.id, id, err)
+				// Следующий исправный кандидат запускается без общей паузы.
+				continue
+			}
+			status := "error"
+			if errors.Is(err, scheduler.ErrNoTracks) {
+				status = "empty"
+			}
+			if errors.Is(err, scheduler.ErrTracksExcluded) {
+				status = "decode_error"
+			}
+			station.setStatus(status, err.Error())
 			log.Printf("станция %s: %v; повтор через %s", station.id, err, delay)
 			if !waitRetry(station.ctx, delay) {
 				return
@@ -66,7 +88,17 @@ func (e *PlaybackEngine) streamLiveTrack(station *Station, track *models.Track) 
 	if started {
 		station.finishTrack()
 	}
+	if err == nil && !started && station.ctx.Err() == nil {
+		err = &TrackError{Err: errors.New("encoder не выдал аудиоданных")}
+	}
 	return err
+}
+
+// setStatus сохраняет подробность только для защищённой диагностики.
+func (s *Station) setStatus(status, reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status, s.lastError = status, reason
 }
 
 // waitRetry заменяет Sleep, чтобы остановка пустой станции не ждала backoff.

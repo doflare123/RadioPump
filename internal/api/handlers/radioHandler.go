@@ -2,11 +2,22 @@ package handlers
 
 import (
 	"RadioPump/internal/api/services"
+	"RadioPump/internal/transcoder"
 	"net/http"
 )
 
 type RadioCatalog interface {
 	State() (services.RadioState, error)
+}
+
+// RadioDiagnosticsHandler подключается только за JWT middleware администратора.
+func RadioDiagnosticsHandler(catalog interface {
+	Diagnostics() []transcoder.StationDiagnostics
+}) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, catalog.Diagnostics())
+	}
 }
 
 // Короткий snapshot-запрос не владеет аудиоподпиской. Его ошибка или повтор

@@ -15,6 +15,13 @@ import (
 
 const defaultChunkSize = 4096
 
+// TrackError отличает ошибку источника/декодирования от невозможности запустить
+// encoder. Системный сбой не должен исключать всю исправную библиотеку.
+type TrackError struct{ Err error }
+
+func (e *TrackError) Error() string { return e.Err.Error() }
+func (e *TrackError) Unwrap() error { return e.Err }
+
 // TrackStreamer задает минимальный контракт для компонента, который умеет
 // превратить файл трека в поток байтов и отправить его в канал станции.
 //
@@ -72,7 +79,14 @@ func NewEncoder(path, bitrate string, sampleRate int) *Encoder {
 //
 // Важно: метод не возвращает весь трек как []byte. Для радио так нельзя делать:
 // большие файлы съедят память, а слушателям нужен живой поток небольшими чанками.
-func (e *Encoder) StreamTrack(ctx context.Context, inputPath string, out chan<- []byte) error {
+func (e *Encoder) StreamTrack(ctx context.Context, inputPath string, out chan<- []byte) (result error) {
+	parent := ctx
+	trackSpecific := false
+	defer func() {
+		if result != nil && trackSpecific && parent.Err() == nil {
+			result = &TrackError{Err: result}
+		}
+	}()
 	// CBR позволяет ограничить и начальный burst FFmpeg, и последний короткий
 	// чанк. Один -re допускает опережение на каждом новом процессе/треке.
 	rateText := strings.ToLower(strings.TrimSpace(e.Bitrate))
@@ -86,6 +100,7 @@ func (e *Encoder) StreamTrack(ctx context.Context, inputPath string, out chan<- 
 		return errors.New("некорректный CBR MP3 bitrate")
 	}
 	rate *= multiplier
+	trackSpecific = true
 	if inputPath == "" {
 		return errors.New("путь к входному аудиофайлу пустой")
 	}
@@ -102,6 +117,7 @@ func (e *Encoder) StreamTrack(ctx context.Context, inputPath string, out chan<- 
 	if !info.Mode().IsRegular() {
 		return errors.New("источник эфира должен быть обычным локальным файлом")
 	}
+	trackSpecific = false
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stall := e.StallTimeout
@@ -129,6 +145,7 @@ func (e *Encoder) StreamTrack(ctx context.Context, inputPath string, out chan<- 
 		"-hide_banner",
 		"-loglevel", "error",
 		"-nostdin",
+		"-xerror",
 		"-re",
 		"-protocol_whitelist", "file,pipe",
 		"-i", inputPath,
@@ -158,6 +175,7 @@ func (e *Encoder) StreamTrack(ctx context.Context, inputPath string, out chan<- 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("не удалось запустить ffmpeg: %w", err)
 	}
+	trackSpecific = true
 
 	buf := make([]byte, chunkSize)
 	wroteAudio := false

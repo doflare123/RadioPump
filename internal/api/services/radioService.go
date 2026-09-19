@@ -9,6 +9,20 @@ import (
 type RadioStateReader interface {
 	Snapshots([]string) ([]transcoder.RadioSnapshot, error)
 }
+
+// RadioDiagnosticsReader отделяет защищённые причины ошибок от публичного кеша.
+type RadioDiagnosticsReader interface {
+	Diagnostics([]string) []transcoder.StationDiagnostics
+}
+
+// Diagnostics читает оперативную диагностику без SQL и без публикации в State.
+func (s *RadioService) Diagnostics() []transcoder.StationDiagnostics {
+	if reader, ok := s.reader.(RadioDiagnosticsReader); ok {
+		return reader.Diagnostics(s.ids)
+	}
+	return []transcoder.StationDiagnostics{}
+}
+
 type RadioService struct {
 	reader    RadioStateReader
 	ids       []string

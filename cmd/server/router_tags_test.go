@@ -73,6 +73,17 @@ func TestTagAndTrackHTTPFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Диагностика может содержать пути из stderr, поэтому публичный доступ запрещён.
+	for _, auth := range []string{"", token} {
+		response := performAdminJSON(t, router, auth, http.MethodGet, "/api/admin/radio", nil)
+		want := http.StatusOK
+		if auth == "" {
+			want = http.StatusUnauthorized
+		}
+		if response.Code != want {
+			t.Fatalf("diagnostics auth: %d, want %d", response.Code, want)
+		}
+	}
 
 	tagsResponse := performAdminJSON(t, router, token, http.MethodGet, "/api/admin/tags", nil)
 	if tagsResponse.Code != http.StatusOK {

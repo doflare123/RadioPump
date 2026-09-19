@@ -5,12 +5,14 @@ import (
 	"errors"
 	"math/rand/v2"
 	"sync"
+	"time"
 )
 
 var (
 	ErrStationNotFound = errors.New("станция не найдена")
 	ErrNoTracks        = errors.New("для станции нет подходящих треков")
 	ErrQueueChanged    = errors.New("библиотека изменилась во время обновления очереди")
+	ErrTracksExcluded  = errors.New("все подходящие треки временно исключены после ошибок")
 )
 
 type Scheduler interface {
@@ -21,6 +23,9 @@ type Scheduler interface {
 	QueueSnapshot(stationID string) (StationSnapshot, error)
 	CurrentTrackID(stationID string) (uint, error)
 	ClearCurrent(stationID string)
+	TrackFailed(stationID string, trackID uint, reason string)
+	TrackSucceeded(stationID string, trackID uint)
+	Failures(stationID string) []TrackFailure
 }
 
 // scheduler защищает быстрые операции общим mutex. Выбор следующего трека
@@ -29,6 +34,7 @@ type scheduler struct {
 	repo     repository.SchedulerRepository
 	mu       sync.RWMutex
 	stations map[string]*stationSchedule
+	now      func() time.Time
 }
 
 type stationSchedule struct {
@@ -39,6 +45,7 @@ type stationSchedule struct {
 	current   uint
 	version   uint64
 	loaded    uint64
+	failures  map[uint]TrackFailure
 }
 
 // StationSnapshot содержит выбранный трек и очередь, но не позицию аудиоплеера.
@@ -50,7 +57,7 @@ type StationSnapshot struct {
 
 // NewScheduler создаёт пустой реестр без фоновых задач.
 func NewScheduler(repo repository.SchedulerRepository) Scheduler {
-	return &scheduler{repo: repo, stations: make(map[string]*stationSchedule)}
+	return &scheduler{repo: repo, stations: make(map[string]*stationSchedule), now: time.Now}
 }
 
 // RegisterStation не требует музыки при старте; первый worker загрузит кандидатов.
@@ -60,7 +67,7 @@ func (s *scheduler) RegisterStation(id string, tags []string) error {
 	if _, exists := s.stations[id]; exists {
 		return errors.New("станция уже зарегистрирована")
 	}
-	s.stations[id] = &stationSchedule{tags: append([]string(nil), tags...), version: 1}
+	s.stations[id] = &stationSchedule{tags: append([]string(nil), tags...), version: 1, failures: make(map[uint]TrackFailure)}
 	return nil
 }
 
@@ -77,6 +84,14 @@ func (s *scheduler) NextTrackID(id string) (uint, error) {
 	defer st.nextMu.Unlock()
 	for attempt := 0; attempt < 3; attempt++ {
 		s.mu.Lock()
+		// Истёкшее исключение возвращает трек в кандидаты даже при непустой очереди.
+		for trackID, failure := range st.failures {
+			if !failure.RetryAt.IsZero() && !s.now().Before(failure.RetryAt) {
+				failure.RetryAt = time.Time{}
+				st.failures[trackID] = failure
+				st.version++
+			}
+		}
 		version := st.version
 		refill := len(st.queue) == 0 || st.loaded != version
 		preserve := len(st.queue) > 0
@@ -99,12 +114,31 @@ func (s *scheduler) NextTrackID(id string) (uint, error) {
 			s.mu.Unlock()
 			continue
 		}
+		// Фильтрация выполняется под тем же mutex, что и регистрация ошибки.
+		present := make(map[uint]bool, len(ids))
+		eligible := make([]uint, 0, len(ids))
+		for _, trackID := range ids {
+			present[trackID] = true
+			if !s.now().Before(st.failures[trackID].RetryAt) {
+				eligible = append(eligible, trackID)
+			}
+		}
+		for trackID := range st.failures {
+			if !present[trackID] {
+				delete(st.failures, trackID)
+			}
+		}
+		hadTracks := len(ids) > 0
+		ids = eligible
 		st.queue = refreshedQueue(st.queue, ids, st.current, preserve)
 		st.available = ids
 		st.loaded = version
 		if len(st.queue) == 0 {
 			st.current = 0
 			s.mu.Unlock()
+			if hadTracks {
+				return 0, ErrTracksExcluded
+			}
 			return 0, ErrNoTracks
 		}
 		next := takeNext(st)

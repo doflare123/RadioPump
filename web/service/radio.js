@@ -87,8 +87,10 @@ function render() {
       tags.dataset.key = tagKey;
       tags.replaceChildren(...(station.tags.length ? station.tags : ["Вся библиотека"]).map(t => node("span", t)));
     }
-    card.querySelector("[data-live]").textContent = track ? (playing ? "ВЫ СЛУШАЕТЕ" : "ПРЯМОЙ ЭФИР") : "ОЖИДАЕМ МУЗЫКУ";
-    card.querySelector("[data-title]").textContent = track?.title || "Станция готовится к эфиру";
+    // Серверное состояние отличает отсутствие кандидатов от неисправного аудио.
+    const states = { empty: "Нет подходящих треков в библиотеке", decode_error: "Ошибка аудио. Проблемные треки временно исключены", error: "Эфир временно недоступен", stopped: "Эфир остановлен", starting: "Станция готовится к эфиру" };
+    card.querySelector("[data-live]").textContent = track ? (playing ? "ВЫ СЛУШАЕТЕ" : "ПРЯМОЙ ЭФИР") : (station.status === "empty" ? "НЕТ МУЗЫКИ" : station.status === "decode_error" ? "ОШИБКА АУДИО" : "ОЖИДАНИЕ ЭФИРА");
+    card.querySelector("[data-title]").textContent = track?.title || states[station.status] || "Станция готовится к эфиру";
     card.querySelector("[data-artist]").textContent = track?.artist || "";
     card.querySelector("[data-album]").textContent = track?.album || "";
     const elapsed = track ? Math.max(0, (now - track.started_ms) / 1000) : 0;

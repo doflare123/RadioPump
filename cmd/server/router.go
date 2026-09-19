@@ -58,12 +58,14 @@ func (s *Server) setupRouter() http.Handler {
 	for _, wave := range s.cfg.Waves {
 		stationIDs = append(stationIDs, wave.Name)
 	}
-	r.Get("/api/radio", handlers.RadioHandler(services.NewRadioService(s.playback, stationIDs)))
+	radioService := services.NewRadioService(s.playback, stationIDs)
+	r.Get("/api/radio", handlers.RadioHandler(radioService))
 	r.Get("/api/covers/{id}", handlers.CoverHandler(s.catalog))
 
 	// Админское API: запись файлов, изменение и удаление доступны только админу.
 	r.Route("/api/admin", func(r chi.Router) {
 		r.Use(adminOnly.AdminOnly)
+		r.Get("/radio", handlers.RadioDiagnosticsHandler(radioService))
 		r.Post("/tracks", trackHandler.CreateTrack)
 		r.Put("/tracks/{id}", trackHandler.UpdateTrack)
 		r.Delete("/tracks/{id}", trackHandler.DeleteTrack)

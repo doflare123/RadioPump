@@ -36,6 +36,8 @@ type Station struct {
 	current      *RadioTrack
 	history      []RadioTrack
 	startedAt    time.Time
+	status       string
+	lastError    string
 }
 
 // PlaybackEngine публикует станции после регистрации scheduler-а.
@@ -110,6 +112,7 @@ func (e *PlaybackEngine) NewStation(id string, tags []string) (*Station, error) 
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Station{id: id, ctx: ctx, cancel: cancel, input: make(chan []byte, 1), subs: make(map[string]chan []byte), bufferChunks: e.bufferChunks}
 	s.tags = append([]string{}, tags...)
+	s.status = "starting"
 	e.stations[id] = s
 	s.wg.Add(2)
 	go func() { defer s.wg.Done(); s.run() }()
