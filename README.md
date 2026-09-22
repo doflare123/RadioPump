@@ -1,95 +1,37 @@
-# Open-Source Self-Hosted Radio (Written in Go)
+# RadioPump
 
-[English](#english) | [Русский](#русский)
+Русский · [English](README.en.md)
 
-> Current implementation and operational limits: [File safety and streaming](docs/reliability.md).
-> Реализованное поведение, проверки и ограничения: [Безопасные файлы и эфир](docs/reliability.md).
+Своё музыкальное радио на компьютере или сервере. Вы загружаете музыку, слушатели открывают сайт и включают волну. У каждой волны общий непрерывный эфир: подключившийся слушатель попадает на текущий трек.
 
----
+- Главная волна играет всю библиотеку, тематические — музыку с выбранными тегами.
+- Название, исполнитель и обложка берутся из файла. Перед загрузкой можно исправить поля.
+- На сайте видны текущий трек, пять предыдущих и пять следующих.
+- Музыкой управляет администратор. Для прослушивания вход не нужен.
 
-## English
+## Запуск
 
-A lightweight, highly customizable, open-source audio streaming and radio server designed to run on your own hardware. Load your tracks, tag them, and start your own 24/7 non-stop broadcast.
+1. Установите Docker с Compose. В Docker Desktop выберите Linux containers.
+2. Скачайте проект через **Code → Download ZIP**, распакуйте и откройте терминал в папке с `docker-compose.yaml`.
+3. Сделайте копию `.env.example` с именем `.env`. Заполните `RADIOPUMP_ADMIN_PASSWORD` своим паролем и `RADIOPUMP_JWT_SECRET` случайным ключом. [Как заполнить эти строки](docs/guide.ru.md#первый-запуск).
+4. Выполните:
 
-### ✨ Features
-
-*   **Self-Hosted & Open-Source:** Complete control over your data and code. Deploy it anywhere.
-*   **Smart Tagging:** Assign custom tags to your audio files based on mood, genre, or era.
-*   **Main Wave:** A continuous 24/7 stream that mixes and plays absolutely every track in your library.
-*   **Custom Waves:** Create separate, dedicated radio stations based on specific tags. Easily configured via config files (YAML) before building or launching.
-*   **Powered by Go:** High performance, minimal memory footprint, and simple deployment with a single binary.
-
-### 🚀 How It Works
-
-1. Upload music through the admin page; automatic folder scanning is not implemented yet.
-2. Assign tags to your songs (optional).
-3. The server generates queues and streams MP3 at `/stream/{wave}`. Gapless transitions are not guaranteed yet; the home page plays the live stations with five-track history/queue and uploaded covers. See [Live radio page](docs/radio-page.md).
-
-### 🛠 Wave Configuration (Example `config.yaml`)
-
-You can flexibly configure additional streams through the configuration file:
-
-```yaml
-waves:
-  - name: "Main Wave"
-    tags: ["all"]
-  - name: "Lo-Fi Chill"
-    tags: ["lo-fi", "relax"]
-  - name: "Hard Rock"
-    tags: ["rock", "metal"]
+```sh
+docker compose up -d --build --wait
 ```
 
-### 📜 License
+Откройте [радио](http://localhost:8080/), затем [вход администратора](http://localhost:8080/admin-login.html). Логин — `admin`, пароль — из `.env`. Загрузите первый трек и включите волну на главной.
 
-This project is open-source but **non-commercial**. You are free to download, study, run, and modify this code for your personal needs, but you are strictly prohibited from selling it or using it for commercial purposes.
+Для первой сборки нужен интернет. Остальные программы Docker установит сам. Пока музыка не загружена, звука не будет. Компьютер и Docker должны оставаться включёнными.
 
-This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)** License.
+## Документация
 
-> **NonCommercial** — You may not use the material for commercial purposes.
+[Руководство](docs/guide.ru.md): загрузка музыки, настройка волн, доступ с других устройств и через интернет, сохранение данных, обновление и решение проблем.
 
-You can read the summary of the license terms in the [LICENSE](LICENSE) file or visit the [official Creative Commons website](https://creativecommons.org).
+[Схема архитектуры](docs/radio-architecture-corrected.drawio.png) · [Исходник схемы](docs/radio-architecture-corrected.drawio)
 
----
+Автоматического добавления музыки из папки, плавных переходов и выравнивания громкости пока нет. Длительная работа под большой нагрузкой ещё не проверена.
 
-## Русский
+## Лицензия
 
-Легковесный и кастомизируемый open-source аудиоплеер/радиосервер для развертывания на собственной машине. Загрузите свои треки, настройте теги и запустите собственное вещание нон-стоп.
-
-### ✨ Особенности проекта
-
-*   **Self-Hosted & Open-Source:** Полный контроль над вашими данными и кодом. Разворачивайте где угодно.
-*   **Умное тегирование:** Присваивайте трекам теги по настроению, жанрам или эпохам прямо в сервисе.
-*   **Main Wave (Главная волна):** Потоковое вещание абсолютно всех ваших треков в режиме 24/7.
-*   **Custom Waves (Тематические волны):** Создание отдельных радио-потоков на основе конкретных тегов. Настраивается через конфигурационные файлы (YAML) перед сборкой или запуском.
-*   **Написано на Go:** Высокая производительность, низкое потребление оперативной памяти и простая сборка в один бинарник.
-
-### 🚀 Как это работает
-
-1. Загрузите музыку через административную страницу; автоматическое сканирование папки пока не реализовано.
-2. Задаете теги для песен (опционально).
-3. Сервер формирует очереди и транслирует MP3 через `/stream/{wave}`. Бесшовные переходы пока не гарантируются; главная воспроизводит живые станции с историей/очередью по пять треков и обложками новых загрузок. Подробнее: [Страница радио](docs/radio-page.md).
-
-### 🛠 Конфигурация волн (Пример `config.yaml`)
-
-Вы можете гибко настраивать дополнительные волны через конфигурационный файл:
-
-```yaml
-waves:
-  - name: "Main Wave"
-    tags: ["all"]
-  - name: "Lo-Fi Chill"
-    tags: ["lo-fi", "relax"]
-  - name: "Hard Rock"
-    tags: ["rock", "metal"]
-```
-
-### 📜 Лицензия
-
-Этот проект является открытым, но **некоммерческим**. Вы можете свободно скачивать, изучать, запускать и модифицировать этот код под свои нужды, но не имеете права продавать его или использовать в коммерческих целях.
-
-Проект лицензирован под международной лицензией **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)**.
-
-> **NonCommercial** — You may not use the material for commercial purposes.
-> *(Некоммерческое использование — Вы не имеете права использовать этот материал в коммерческих целях).*
-
-Ознакомиться с кратким описанием условий можно в файле [LICENSE](LICENSE) или на [официальном сайте Creative Commons](https://creativecommons.org).
+[CC BY-NC 4.0](LICENSE): некоммерческое использование с указанием авторства.

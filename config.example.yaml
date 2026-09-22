@@ -1,0 +1,17 @@
+# Секреты задаются через RADIOPUMP_ADMIN_PASSWORD и RADIOPUMP_JWT_SECRET.
+server:
+  port: 8080
+  admin_name: admin
+music:
+  dir: ./music
+  max_file_size_mb: 100
+cors:
+  allowed_origins: []
+waves:
+  # Пустой список тегов выбирает всю библиотеку; all — обычный тег.
+  - name: Main
+    tags: []
+stream:
+  bitrate: 128k
+  sample_rate: 44100
+  buffer_seconds: 5

@@ -1,0 +1,11 @@
+# Замените radio.example.com своим доменом; DNS должен указывать на сервер.
+radio.example.com {
+    log
+    reverse_proxy radio:8080 {
+        # Ответы эфира отправляются без накопления буфера.
+        flush_interval -1
+        transport http {
+            keepalive 30s
+        }
+    }
+}

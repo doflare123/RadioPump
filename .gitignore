@@ -28,3 +28,6 @@ go.work.sum
 data/
 music/
 .cache/
+backups/
+secrets/
+release-results/

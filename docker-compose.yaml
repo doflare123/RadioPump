@@ -1,0 +1,36 @@
+services:
+  radio:
+    build: .
+    image: radiopump:local
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    ports:
+      - "${RADIOPUMP_BIND:-127.0.0.1}:${RADIOPUMP_PORT:-8080}:8080"
+    environment:
+      RADIOPUMP_ADMIN_NAME: ${RADIOPUMP_ADMIN_NAME:-admin}
+      RADIOPUMP_ADMIN_PASSWORD: ${RADIOPUMP_ADMIN_PASSWORD:?Заполните RADIOPUMP_ADMIN_PASSWORD в .env}
+      RADIOPUMP_JWT_SECRET: ${RADIOPUMP_JWT_SECRET:?Заполните RADIOPUMP_JWT_SECRET в .env}
+    volumes:
+      - music:/app/music
+      - data:/app/data
+      - ${RADIOPUMP_CONFIG_PATH:-./config.example.yaml}:/app/config.yaml:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/api/healthz]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  music:
+  data:
