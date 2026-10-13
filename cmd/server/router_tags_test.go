@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -109,7 +110,7 @@ func TestTagAndTrackHTTPFlow(t *testing.T) {
 	}
 
 	trackResponse := performAdminJSON(t, router, token, http.MethodPost, "/api/admin/tracks", map[string]any{
-		"title": "Tagged track", "path": source, "tag_ids": []uint{pop},
+		"title": "Tagged track", "artist": "Artist", "album": "Album", "duration": 123, "path": source, "tag_ids": []uint{pop},
 	})
 	if trackResponse.Code != http.StatusCreated {
 		t.Fatalf("POST track status = %d, body = %s", trackResponse.Code, trackResponse.Body.String())
@@ -120,6 +121,32 @@ func TestTagAndTrackHTTPFlow(t *testing.T) {
 	}
 	if len(track.Tags) != 1 || track.Tags[0].Name != "pop" {
 		t.Fatalf("created track tags = %#v", track.Tags)
+	}
+	// Частичные изменения не стирают остальные поля, а явные пустые значения
+	// сохраняются. Неверный тег откатывает одновременно и изменение названия.
+	trackURL := "/api/admin/tracks/" + uintString(track.ID)
+	for _, payload := range []map[string]any{{"tag_ids": []uint{pop}}, {}, {"title": nil}} {
+		response := performAdminJSON(t, router, token, http.MethodPut, trackURL, payload)
+		loaded, err := repo.GetByID(track.ID)
+		if response.Code != http.StatusOK || err != nil || loaded.Title != track.Title || loaded.Artist != "Artist" || loaded.Album != "Album" || loaded.Duration != 123 {
+			t.Fatalf("partial update: %d, %+v, %v", response.Code, loaded, err)
+		}
+	}
+	badUpdate := performAdminJSON(t, router, token, http.MethodPut, trackURL, map[string]any{"title": "Lost", "tag_ids": []uint{999999}})
+	unchanged, err := repo.GetByID(track.ID)
+	if badUpdate.Code != http.StatusBadRequest || err != nil || unchanged.Title != track.Title {
+		t.Fatalf("update rollback: %d, %+v, %v", badUpdate.Code, unchanged, err)
+	}
+	cleared := performAdminJSON(t, router, token, http.MethodPut, trackURL, map[string]any{"artist": "", "duration": 0})
+	loadedClear, err := repo.GetByID(track.ID)
+	if cleared.Code != http.StatusOK || err != nil || loadedClear.Artist != "" || loadedClear.Duration != 0 || loadedClear.Album != "Album" || len(loadedClear.Tags) != 1 {
+		t.Fatalf("explicit clear: %d, %+v, %v", cleared.Code, loadedClear, err)
+	}
+	for _, payload := range []map[string]any{{"duration": -1}, {"title": strings.Repeat("x", 65<<10)}} {
+		response := performAdminJSON(t, router, token, http.MethodPut, trackURL, payload)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid update: %d", response.Code)
+		}
 	}
 	unknownTag := performAdminJSON(t, router, token, http.MethodPost, "/api/admin/tracks", map[string]any{
 		"title": "Invalid tags", "path": source, "tag_ids": []uint{999999},

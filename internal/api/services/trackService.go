@@ -198,13 +198,13 @@ func (s *TrackService) cleanupFiles(onlyPath string) error {
 	if len(paths) == 0 {
 		return nil
 	}
-	tracks, err := s.repo.GetAll()
+	trackPaths, err := s.repo.GetTrackPaths()
 	if err != nil {
 		return err
 	}
 	used := make(map[string]bool)
-	for _, track := range tracks {
-		used[fileKey(track.Path)] = true
+	for _, path := range trackPaths {
+		used[fileKey(path)] = true
 	}
 	var failures []error
 	for _, path := range paths {

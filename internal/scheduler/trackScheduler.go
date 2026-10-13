@@ -231,7 +231,8 @@ func (s *scheduler) ClearCurrent(id string) {
 	}
 }
 
-// QueueSnapshot возвращает независимую копию, не раскрывая внутренние slices.
+// QueueSnapshot копирует только пять публичных будущих позиций, чтобы опрос
+// состояния не выделял память пропорционально размеру всей библиотеки.
 func (s *scheduler) QueueSnapshot(id string) (StationSnapshot, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -239,11 +240,16 @@ func (s *scheduler) QueueSnapshot(id string) (StationSnapshot, error) {
 	if st == nil {
 		return StationSnapshot{}, ErrStationNotFound
 	}
-	return StationSnapshot{StationID: id, CurrentID: st.current, Queue: append([]uint(nil), st.queue...)}, nil
+	return StationSnapshot{StationID: id, CurrentID: st.current, Queue: append([]uint(nil), st.queue[:min(5, len(st.queue))]...)}, nil
 }
 
 // CurrentTrackID сохраняет небольшой контракт чтения выбранного scheduler-ом ID.
 func (s *scheduler) CurrentTrackID(id string) (uint, error) {
-	snapshot, err := s.QueueSnapshot(id)
-	return snapshot.CurrentID, err
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	st := s.stations[id]
+	if st == nil {
+		return 0, ErrStationNotFound
+	}
+	return st.current, nil
 }

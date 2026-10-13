@@ -10,6 +10,29 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// Очистке нужны все уникальные пути, включая треки без тегов и общие старые файлы.
+func TestGetTrackPathsKeepsUntaggedAndSharedPaths(t *testing.T) {
+	repo := NewRepository(testDatabase(t, "track-paths"))
+	rock := findTag(t, repo, "rock")
+	for _, track := range []*models.Track{
+		{Title: "One", Path: "shared.flac", Tags: []models.Tag{rock}},
+		{Title: "Two", Path: "shared.flac"},
+		{Title: "Three", Path: "untagged.wav"},
+	} {
+		if err := repo.Create(track); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths, err := repo.GetTrackPaths()
+	seen := make(map[string]bool)
+	for _, path := range paths {
+		seen[path] = true
+	}
+	if err != nil || len(paths) != 2 || !seen["shared.flac"] || !seen["untagged.wav"] {
+		t.Fatalf("paths = %v, err = %v", paths, err)
+	}
+}
+
 // TestTrackTagsAreTransactional проверяет загрузку связей, очистку и rollback
 // всей записи трека при передаче несуществующего tag ID.
 func TestTrackTagsAreTransactional(t *testing.T) {

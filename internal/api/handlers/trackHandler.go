@@ -222,23 +222,21 @@ func (h *TrackHandler) UpdateTrack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var payload trackPayload
+	// Ограничиваем JSON и сохраняем признак присутствия каждого поля: запрос
+	// только с tag_ids не должен стирать название, исполнителя и длительность.
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	var payload struct {
+		models.TrackChanges
+		TagIDs *[]uint `json:"tag_ids"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		writeError(w, http.StatusBadRequest, "некорректный json")
 		return
 	}
-	if payload.Duration < 0 {
-		writeError(w, http.StatusBadRequest, "поле duration должно быть неотрицательным числом")
-		return
-	}
-
 	track := &models.Track{
-		ID:       id,
-		Title:    payload.Title,
-		Artist:   payload.Artist,
-		Album:    payload.Album,
-		Duration: uint(payload.Duration),
-		Tags:     payloadTags(payload.TagIDs),
+		ID:      id,
+		Changes: &payload.TrackChanges,
+		Tags:    payloadTags(payload.TagIDs),
 	}
 
 	err = h.trackService.Update(track)

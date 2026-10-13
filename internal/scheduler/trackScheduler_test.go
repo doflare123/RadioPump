@@ -149,3 +149,39 @@ func TestFiveUpcomingRemainStableAcrossCycles(t *testing.T) {
 		}
 	}
 }
+
+// Большая библиотека не увеличивает публичный снимок и не позволяет клиенту
+// изменить реальную очередь через возвращённый срез.
+func TestQueueSnapshotIsBoundedAndIndependent(t *testing.T) {
+	s := NewScheduler(nil).(*scheduler)
+	_ = s.RegisterStation("large", nil)
+	st := s.stations["large"]
+	st.current = 7
+	st.queue = make([]uint, 100000)
+	for i := range st.queue {
+		st.queue[i] = uint(i + 1)
+	}
+	snapshot, err := s.QueueSnapshot("large")
+	if err != nil || len(snapshot.Queue) != 5 || snapshot.CurrentID != 7 {
+		t.Fatalf("snapshot = %+v, err = %v", snapshot, err)
+	}
+	snapshot.Queue[0] = 999
+	if st.queue[0] != 1 || len(st.queue) != 100000 {
+		t.Fatal("snapshot modified playback queue")
+	}
+	if id, err := s.CurrentTrackID("large"); err != nil || id != 7 {
+		t.Fatalf("current = %d, %v", id, err)
+	}
+}
+
+// Измеряет цену опроса на большой библиотеке без включения подготовки очереди.
+func BenchmarkLargeQueueSnapshot(b *testing.B) {
+	s := NewScheduler(nil).(*scheduler)
+	_ = s.RegisterStation("large", nil)
+	s.stations["large"].queue = make([]uint, 100000)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = s.QueueSnapshot("large")
+	}
+}

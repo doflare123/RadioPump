@@ -112,7 +112,7 @@ func NewServer() (*Server, error) {
 	if err := catalog.CleanupFiles(); err != nil {
 		log.Printf("отложенное удаление файлов: %v", err)
 	}
-	tracks, err := repo.GetAll()
+	trackPaths, err := repo.GetTrackPaths()
 	if err != nil {
 		return nil, err
 	}
@@ -120,9 +120,7 @@ func NewServer() (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, track := range tracks {
-		paths = append(paths, track.Path)
-	}
+	paths = append(paths, trackPaths...)
 	if err := fileStorage.RecoverUploads(paths); err != nil {
 		return nil, fmt.Errorf("восстановление upload: %w", err)
 	}

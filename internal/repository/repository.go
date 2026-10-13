@@ -15,6 +15,7 @@ var (
 
 type TrackRepository interface {
 	GetAll() ([]models.Track, error)
+	GetTrackPaths() ([]string, error)
 	GetByID(id uint) (*models.Track, error)
 	GetRadioTracks(ids []uint) (map[uint]models.Track, error)
 	Create(track *models.Track) error
@@ -83,6 +84,25 @@ func (r *SQLiteRepository) GetAll() ([]models.Track, error) {
 		LEFT JOIN track_tags tt ON tt.track_id = t.id
 		LEFT JOIN tags g ON g.id = tt.tag_id
 		ORDER BY t.id DESC, g.name ASC`)
+}
+
+// GetTrackPaths читает только ссылки на аудио для очистки и восстановления.
+// DISTINCT использует индекс пути и не размножает строки по тегам трека.
+func (r *SQLiteRepository) GetTrackPaths() ([]string, error) {
+	rows, err := r.db.Query(`SELECT DISTINCT path FROM tracks`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var paths []string
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, err
+		}
+		paths = append(paths, path)
+	}
+	return paths, rows.Err()
 }
 
 // GetMusic сохраняет согласованную семантику ИЛИ: достаточно одного тега волны.
@@ -169,12 +189,18 @@ func (r *SQLiteRepository) Update(track *models.Track) error {
 		return err
 	}
 	defer tx.Rollback()
+	// Указатели передаются в SQL как значение либо NULL. COALESCE сохраняет
+	// пропущенные поля атомарно, в том числе при параллельном редактировании.
+	changes := track.Changes
+	if changes == nil {
+		changes = &models.TrackChanges{Title: &track.Title, Artist: &track.Artist, Album: &track.Album, Duration: &track.Duration}
+	}
 
 	res, err := tx.Exec(`
 		UPDATE tracks
-		SET title = ?, artist = ?, album = ?, duration = ?
+		SET title = COALESCE(?, title), artist = COALESCE(?, artist), album = COALESCE(?, album), duration = COALESCE(?, duration)
 		WHERE id = ?`,
-		track.Title, track.Artist, track.Album, track.Duration, track.ID)
+		changes.Title, changes.Artist, changes.Album, changes.Duration, track.ID)
 	if err != nil {
 		return err
 	}
