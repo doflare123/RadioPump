@@ -26,6 +26,10 @@ The first build needs internet access. Docker installs the other required progra
 
 ## Documentation
 
+In development: a [Flutter application](apps/radiopump) with station selection,
+multiple server profiles and a desktop tray mini-player.
+[How to run it](docs/guide.en.md#application).
+
 [User guide](docs/guide.en.md): uploading music, setting up stations, access from other devices and the internet, saving your data, updates and troubleshooting. The current web interface is in Russian; the guide includes the button names.
 
 [Architecture diagram](docs/radio-architecture-corrected.drawio.png) · [Editable diagram](docs/radio-architecture-corrected.drawio)

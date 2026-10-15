@@ -98,6 +98,48 @@ RADIOPUMP_BIND=0.0.0.0
 
 Apply the settings. Find the radio computer's local IP in its network settings. On another device, open an address such as `http://192.168.1.50:8080/`, using your own IP. If the page does not open, allow incoming connections to the chosen port in your firewall settings.
 
+## Application
+
+`apps/radiopump` contains an early Flutter application targeting Windows, macOS,
+Linux, Android and iOS. It connects to an existing server, which continues to store
+the music and broadcast the shared stream. Store releases are not available yet.
+
+Install Flutter and the build tools for your platform, then run:
+
+```sh
+cd apps/radiopump
+flutter pub get
+flutter run -d windows --release
+```
+
+Use `-d macos` on a Mac or `-d linux` on Linux. For a phone, find its ID with
+`flutter devices` and use it instead of `windows`. Building for iOS requires a Mac
+with Xcode. If Windows reports that symlinks are required, enable Windows Developer
+Mode and try again.
+
+1. Select «Добавить радио» (Add radio), enter a name and the full server address,
+   such as `https://radio.example.org` or `http://192.168.1.10:8080`.
+2. Select a station and press play. An administrator login is not required.
+3. To listen to another owner's radio, add their server and choose its name at
+   the top. The top selector changes servers; the list contains the selected server's stations.
+
+The arrows switch stations, not tracks in the shared broadcast. The progress bar
+shows the current track's time; seeking and history playback are not available.
+After stopping, play reconnects to the current live broadcast. Metadata and artwork
+may appear slightly ahead of the audio.
+
+On desktop, closing the window hides it in the tray when a tray is available.
+Click the tray icon for the mini-player and «Развернуть» (Expand) for the full window.
+Choose «Выход» (Quit) from the icon's menu to exit. If the tray is unavailable,
+closing the window exits the application. Some Linux desktops require AppIndicator support.
+
+Phones use one main screen, with Android's media notification and iOS system media
+controls configured for background playback. Background playback and interruptions
+still require real-device checks; platform project files alone do not verify every OS.
+Use `--release` for memory comparisons rather than a debug build.
+
+Music uploads and library management remain in the web interface.
+
 ## Access over the internet
 
 You need a server reachable from the internet and a domain name. The password protects library management; listening and original audio files are available without signing in.

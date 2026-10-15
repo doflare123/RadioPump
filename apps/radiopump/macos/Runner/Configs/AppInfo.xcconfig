@@ -1,0 +1,7 @@
+// Платформенная оболочка Flutter. Прикладной плеер и состояние находятся в lib/.
+
+PRODUCT_NAME = radiopump
+
+PRODUCT_BUNDLE_IDENTIFIER = dev.radiopump.radiopump
+
+PRODUCT_COPYRIGHT = Copyright © 2026 dev.radiopump. All rights reserved.
